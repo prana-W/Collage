@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { 
   Send, 
   Bot, 
@@ -11,7 +13,9 @@ import {
   FileText,
   Trash2,
   ExternalLink,
-  Zap
+  Zap,
+  Globe,
+  Link as LinkIcon
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,46 +28,64 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 const API_QUERY_URL = `${BASE_URL}/query/stream`;
 const API_VIEW_DOC_URL = `${BASE_URL}/documents/view`;
 
-const renderFormattedMessage = (text) => {
-  if (!text) return null;
+const FormattedMarkdown = ({ content }) => {
+  if (!content) return null;
 
-  // Regex matches any filename ending in .pdf
-  const pdfRegex = /\b([a-zA-Z0-9_\-]+\.pdf)\b/g;
-  const parts = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = pdfRegex.exec(text)) !== null) {
-    const pdfName = match[1];
-    const matchIndex = match.index;
-
-    if (matchIndex > lastIndex) {
-      parts.push(text.substring(lastIndex, matchIndex));
-    }
-
-    parts.push(
-      <a
-        key={`${pdfName}-${matchIndex}`}
-        href={`${API_VIEW_DOC_URL}/${encodeURIComponent(pdfName)}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={`View document: ${pdfName}`}
-        className="inline-flex items-center gap-1 font-mono text-[11px] px-1.5 py-0.5 mx-0.5 rounded bg-primary/10 border border-primary/30 text-primary hover:underline hover:bg-primary/20 transition-colors"
-      >
-        <FileText className="w-3 h-3 shrink-0" />
-        <span>{pdfName}</span>
-        <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
-      </a>
-    );
-
-    lastIndex = matchIndex + pdfName.length;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(text.substring(lastIndex));
-  }
-
-  return parts;
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        strong: ({ node, ...props }) => (
+          <strong className="font-bold text-foreground bg-primary/10 px-1 py-0.5 rounded" {...props} />
+        ),
+        h1: ({ node, ...props }) => (
+          <h1 className="text-xl font-bold mt-4 mb-2 text-foreground border-b border-border pb-1" {...props} />
+        ),
+        h2: ({ node, ...props }) => (
+          <h2 className="text-lg font-bold mt-3 mb-2 text-foreground" {...props} />
+        ),
+        h3: ({ node, ...props }) => (
+          <h3 className="text-base font-semibold mt-3 mb-1.5 text-foreground" {...props} />
+        ),
+        ul: ({ node, ...props }) => (
+          <ul className="list-disc list-inside my-2 space-y-1 text-foreground" {...props} />
+        ),
+        ol: ({ node, ...props }) => (
+          <ol className="list-decimal list-inside my-2 space-y-1 text-foreground" {...props} />
+        ),
+        li: ({ node, ...props }) => (
+          <li className="my-0.5 leading-relaxed" {...props} />
+        ),
+        p: ({ node, ...props }) => (
+          <p className="mb-2 last:mb-0 leading-relaxed" {...props} />
+        ),
+        code: ({ node, inline, ...props }) => 
+          inline ? (
+            <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-xs text-primary" {...props} />
+          ) : (
+            <code className="block bg-muted/60 p-3 rounded-lg font-mono text-xs overflow-x-auto my-2 border border-border" {...props} />
+          ),
+        a: ({ node, href, children, ...props }) => {
+          const isWebUrl = href?.startsWith('http://') || href?.startsWith('https://');
+          const targetUrl = isWebUrl ? href : `${API_VIEW_DOC_URL}/${encodeURIComponent(href || '')}`;
+          return (
+            <a
+              href={targetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary font-medium hover:underline inline-flex items-center gap-1"
+              {...props}
+            >
+              {children}
+              <ExternalLink className="w-3 h-3 shrink-0" />
+            </a>
+          );
+        }
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 };
 
 const Query = () => {
@@ -90,7 +112,7 @@ const Query = () => {
     // Add user message to conversation list
     const userMsg = { id: Date.now(), role: 'user', text: queryText };
     const botMsgId = Date.now() + 1;
-    const initialBotMsg = { id: botMsgId, role: 'assistant', text: '', isStreaming: true };
+    const initialBotMsg = { id: botMsgId, role: 'assistant', text: '', sources: [], isStreaming: true };
 
     setMessages((prev) => [...prev, userMsg, initialBotMsg]);
     setQuestion('');
@@ -117,7 +139,6 @@ const Query = () => {
         throw new Error(errData.detail || `Query failed with status ${response.status}`);
       }
 
-      // Stream response reading
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let accumulatedText = '';
@@ -131,12 +152,17 @@ const Query = () => {
 
         let cleanText = accumulatedText;
         let tokenStats = null;
+        let sourcesList = [];
 
         if (accumulatedText.includes('__TOKEN_USAGE__:')) {
           const parts = accumulatedText.split('__TOKEN_USAGE__:');
           cleanText = parts[0];
           try {
-            tokenStats = JSON.parse(parts[1].trim());
+            const statsObj = JSON.parse(parts[1].trim());
+            tokenStats = statsObj;
+            if (statsObj.sources && Array.isArray(statsObj.sources)) {
+              sourcesList = statsObj.sources;
+            }
           } catch (e) {
             console.error('Failed to parse token usage JSON:', e);
           }
@@ -145,13 +171,17 @@ const Query = () => {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === botMsgId
-              ? { ...msg, text: cleanText, tokenStats }
+              ? { 
+                  ...msg, 
+                  text: cleanText, 
+                  tokenStats,
+                  sources: sourcesList.length > 0 ? sourcesList : msg.sources 
+                }
               : msg
           )
         );
       }
 
-      // Mark streaming as complete
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === botMsgId
@@ -187,19 +217,19 @@ const Query = () => {
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border/40">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5 text-foreground">
             <Sparkles className="w-6 h-6 text-primary" />
             Institute Knowledge Assistant
           </h1>
           <p className="text-muted-foreground text-xs mt-0.5">
-            Ask questions grounded strictly in your institute's ingested PDF documents with citations.
+            Ask questions grounded strictly in your institute's ingested documents and web pages.
           </p>
         </div>
 
         {/* Institute Selector */}
         <div className="flex items-center gap-3 bg-card p-2 rounded-xl border border-border/60 shadow-sm">
           <Building2 className="w-4 h-4 text-primary shrink-0 ml-1" />
-          <Label htmlFor="slug" className="text-xs font-semibold whitespace-nowrap">
+          <Label htmlFor="slug" className="text-xs font-semibold whitespace-nowrap text-foreground">
             Target Institute:
           </Label>
           <Input
@@ -207,7 +237,7 @@ const Query = () => {
             type="text"
             value={collegeSlug}
             onChange={(e) => setCollegeSlug(e.target.value)}
-            className="h-8 text-xs font-mono w-32 bg-background"
+            className="h-8 text-xs font-mono w-32 bg-background text-foreground"
             placeholder="e.g. nitjsr"
           />
           {messages.length > 0 && (
@@ -237,17 +267,17 @@ const Query = () => {
                   Ask Anything About Your Institute Docs
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Make sure you have ingested PDFs for institute <span className="font-mono text-primary font-medium">"{collegeSlug}"</span> first.
+                  Make sure you have ingested documents for institute <span className="font-mono text-primary font-medium">"{collegeSlug}"</span> first.
                 </p>
               </div>
 
               {/* Sample Queries */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-4 w-full max-w-lg">
                 {[
-                  "What are the major syllabus topics?",
+                  "What is the best way to reach the institute?",
                   "Summarize the grading criteria",
-                  "What is mentioned on page 1?",
-                  "What are the attendance requirements?"
+                  "What are the attendance requirements?",
+                  "List the key academic notices"
                 ].map((sample, idx) => (
                   <button
                     key={idx}
@@ -279,7 +309,7 @@ const Query = () => {
                   )}
 
                   <div
-                    className={`max-w-[85%] md:max-w-[75%] rounded-2xl p-4 shadow-sm space-y-2 ${
+                    className={`max-w-[85%] md:max-w-[78%] rounded-2xl p-4 shadow-sm space-y-3 ${
                       msg.role === 'user'
                         ? 'bg-primary text-primary-foreground font-medium rounded-tr-none'
                         : msg.isError
@@ -288,35 +318,70 @@ const Query = () => {
                     }`}
                   >
                     {/* Role Header */}
-                    <div className="text-[11px] font-semibold opacity-70 flex items-center gap-1.5 mb-1">
-                      {msg.role === 'user' ? 'You' : `AI Assistant (${collegeSlug})`}
-                    </div>
-
-                    {/* Message Body */}
-                    <div className="whitespace-pre-wrap leading-relaxed text-sm">
-                      {msg.text ? (
-                        renderFormattedMessage(msg.text)
-                      ) : (
-                        <span className="inline-flex items-center gap-2 text-muted-foreground italic text-xs">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                          Searching knowledge base & generating answer...
+                    <div className="text-[11px] font-semibold opacity-70 flex items-center justify-between gap-1.5 border-b border-border/30 pb-1.5">
+                      <span>{msg.role === 'user' ? 'You' : `AI Assistant (${collegeSlug})`}</span>
+                      {msg.tokenStats?.total_tokens && (
+                        <span className="font-mono text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-md border border-primary/20">
+                          {msg.tokenStats.total_tokens} tokens
                         </span>
                       )}
                     </div>
 
-                    {/* Token Usage Audit Badge */}
-                    {msg.role === 'assistant' && msg.tokenStats && (
-                      <div className="mt-3 pt-2 border-t border-border/40 flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
-                        <span className="inline-flex items-center gap-1 text-primary font-semibold px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
-                          <Zap className="w-3 h-3 text-primary shrink-0" />
-                          {msg.tokenStats.total_tokens.toLocaleString()} tokens used
+                    {/* Message Body with Markdown Rendering */}
+                    <div className="leading-relaxed text-sm">
+                      {msg.role === 'user' ? (
+                        <span>{msg.text}</span>
+                      ) : msg.text ? (
+                        <FormattedMarkdown content={msg.text} />
+                      ) : (
+                        <span className="inline-flex items-center gap-2 text-muted-foreground italic text-xs">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Retrieving information...
                         </span>
+                      )}
+                    </div>
+
+                    {/* Rendered Sources List */}
+                    {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                      <div className="pt-3 border-t border-border/40 space-y-2">
+                        <div className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+                          <BookOpen className="w-3.5 h-3.5 text-primary" />
+                          <span>Sources Referenced:</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {msg.sources.map((src, idx) => {
+                            const isWebUrl = src.startsWith('http://') || src.startsWith('https://');
+                            const href = isWebUrl 
+                              ? src 
+                              : `${API_VIEW_DOC_URL}/${encodeURIComponent(src)}`;
+                            const isPdf = src.toLowerCase().endsWith('.pdf') || src.toLowerCase().includes('.pdf');
+
+                            return (
+                              <a
+                                key={idx}
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Open ${isWebUrl ? 'website' : 'PDF document'}: ${src}`}
+                                className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all font-mono"
+                              >
+                                {isPdf ? (
+                                  <FileText className="w-3.5 h-3.5 shrink-0" />
+                                ) : (
+                                  <Globe className="w-3.5 h-3.5 shrink-0" />
+                                )}
+                                <span className="max-w-[280px] truncate">{src}</span>
+                                <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                              </a>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
 
                   {msg.role === 'user' && (
-                    <div className="w-8 h-8 rounded-full bg-secondary text-secondary-foreground border border-border flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0">
                       <User className="w-4 h-4" />
                     </div>
                   )}
@@ -327,28 +392,28 @@ const Query = () => {
           )}
         </CardContent>
 
-        {/* Input Bar */}
-        <div className="p-4 bg-card border-t border-border/60">
-          <form onSubmit={handleAsk} className="flex gap-2">
+        {/* Input Footer */}
+        <div className="p-4 border-t border-border/60 bg-card">
+          <form onSubmit={handleAsk} className="flex items-center gap-2">
             <Input
               type="text"
-              placeholder={`Ask a question about ${collegeSlug}...`}
+              placeholder={`Ask a question for ${collegeSlug}...`}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               disabled={isGenerating}
-              className="flex-1 bg-background text-sm"
+              className="flex-1 bg-background border-input text-foreground h-11 rounded-xl"
             />
             <Button 
               type="submit" 
               disabled={isGenerating || !question.trim()}
-              className="px-5 font-medium shrink-0"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-5 rounded-xl gap-2 font-medium"
             >
               {isGenerating ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <>
-                  <span>Ask</span>
-                  <Send className="w-4 h-4 ml-1.5" />
+                  <Send className="w-4 h-4" />
+                  <span>Send</span>
                 </>
               )}
             </Button>

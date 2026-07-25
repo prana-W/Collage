@@ -161,7 +161,19 @@ npm run dev
   - **Ingest Page**: Added dedicated **Website Crawler (Crawl4AI)** tab for entering college URLs, configuring max pages, and submitting ingestion jobs.
   - **Documents Page**: Added **Crawled Web Links** tab displaying URL, crawl stats, chunks stored, and a **Delete Link & Purge Embeddings** action backed by `ConfirmDialog`.
 
+### 16. Structured RAG Output & Markdown Formatting (`RAGResponse` + `ReactMarkdown`)
+- **Pydantic Model (`RAGResponse`)**:
+  - Defined in `server/llm/rag_chain.py`: `content: str` (markdown answer) and `sources: list[str]` (unique source URLs or uploaded PDF filenames).
+- **Metadata Source Extraction**:
+  - Automatically extracts `source_url` (for web crawls) or `source_file` (for PDF uploads) from ChromaDB retrieved vector chunks.
+- **Frontend Markdown & Dynamic Source Rendering (`Query.jsx`)**:
+  - Integrates `ReactMarkdown` with `remark-gfm` for full markdown rendering (`**bold**`, bulleted lists, numbered lists, section headings).
+  - Displays a dedicated **Sources Referenced** container rendering items as interactive pill links:
+    - **Web URLs**: Clicking opens the target website in a new tab (`target="_blank"`).
+    - **PDF Files**: Clicking opens the document via `/api/v1/documents/view/{filename}` in a new tab (`target="_blank"`).
+
 ---
+
 
 ## Startup Instructions
 

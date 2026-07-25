@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from llm.rag_chain import build_rag_chain, stream_rag_with_token_audit
+from llm.rag_chain import query_rag_structured, stream_rag_with_token_audit, RAGResponse
 from api.v1.auth import get_current_user
 from db.models import User
 
@@ -24,7 +24,7 @@ async def query_knowledge_base(
 ) -> JSONResponse:
     """
     Accepts a question and college_slug, runs the RAG chain, and returns
-    the generated answer with source citations. Requires Bearer Token.
+    a structured response (content and sources) via Pydantic model. Requires Bearer Token.
     """
     if not request.college_slug.strip():
         raise HTTPException(status_code=400, detail="college_slug cannot be empty.")
@@ -32,13 +32,17 @@ async def query_knowledge_base(
         raise HTTPException(status_code=400, detail="question cannot be empty.")
 
     try:
-        chain = build_rag_chain(college_slug=request.college_slug.strip(), top_k=request.top_k)
-        answer = chain.invoke({"question": request.question.strip()})
+        rag_response: RAGResponse = query_rag_structured(
+            question=request.question.strip(),
+            college_slug=request.college_slug.strip(),
+            top_k=request.top_k
+        )
 
         return JSONResponse(content={
             "college_slug": request.college_slug,
             "question": request.question,
-            "answer": answer,
+            "content": rag_response.content,
+            "sources": rag_response.sources,
             "asked_by": current_user.email,
         })
     except Exception as e:
@@ -53,7 +57,7 @@ async def stream_query_knowledge_base(
 ):
     """
     Streams tokens in real-time using Server-Sent Events (SSE) / text stream. Requires Bearer Token.
-    Appends token audit metrics at the end of the stream.
+    Appends token audit metrics and sources list at the end of the stream.
     """
     if not request.college_slug.strip():
         raise HTTPException(status_code=400, detail="college_slug cannot be empty.")
