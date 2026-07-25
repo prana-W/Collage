@@ -150,6 +150,17 @@ npm run dev
 - **Usage**: `uv run python ingestion/web_ingestion.py <URL> <college_slug> [max_pages]`
 - **Planned Enhancements**: Sitemap-first URL discovery, URL pattern filtering, concurrent crawling with `arun_many()`, PDF link harvesting, content dedup via hashing, crawl depth limiting.
 
+### 15. Web Ingestion API & Dual Storage Management (`WebLink` MySQL + ChromaDB Purge)
+- **Database Tracking (`web_links` table)**:
+  - Tracks web crawler requests submitted by admins: `id`, `college_slug`, `url` (official root link), `max_pages`, `pages_crawled`, `chunks_stored`, `status`, `user_id`, `created_at`.
+- **API Endpoints**:
+  - `POST /api/v1/ingest/web`: Receives `url`, `max_pages`, `college_slug`. Validates admin role, records entry in MySQL (`status="processing"`), and runs background Crawl4AI web ingestion.
+  - `GET /api/v1/ingest/web/links/{college_slug}`: Retrieves all web links ingested for the college.
+  - `DELETE /api/v1/ingest/web/links/{link_id}`: Deletes the link entry from MySQL AND purges all vector chunks matching `root_url` and `college_slug` from ChromaDB via `delete_documents_by_root_url()`.
+- **Frontend Integration (`Ingest.jsx` & `Documents.jsx`)**:
+  - **Ingest Page**: Added dedicated **Website Crawler (Crawl4AI)** tab for entering college URLs, configuring max pages, and submitting ingestion jobs.
+  - **Documents Page**: Added **Crawled Web Links** tab displaying URL, crawl stats, chunks stored, and a **Delete Link & Purge Embeddings** action backed by `ConfirmDialog`.
+
 ---
 
 ## Startup Instructions

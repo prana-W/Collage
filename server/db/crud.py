@@ -1,7 +1,7 @@
 import logging
 from sqlalchemy.orm import Session
 from db.database import SessionLocal
-from db.models import User, College
+from db.models import User, College, WebLink
 
 logger = logging.getLogger(__name__)
 
@@ -41,3 +41,63 @@ def record_token_usage(user_id: int, college_slug: str, tokens_count: int) -> in
         db.close()
 
     return new_user_total
+
+
+def create_web_link(db: Session, college_slug: str, url: str, max_pages: int = 10, user_id: int = None) -> WebLink:
+    """Creates a new WebLink tracking record in MySQL."""
+    web_link = WebLink(
+        college_slug=college_slug,
+        url=url,
+        max_pages=max_pages,
+        pages_crawled=0,
+        chunks_stored=0,
+        status="pending",
+        user_id=user_id
+    )
+    db.add(web_link)
+    db.commit()
+    db.refresh(web_link)
+    return web_link
+
+
+def update_web_link_status(
+    db: Session,
+    link_id: int,
+    status: str,
+    pages_crawled: int = 0,
+    chunks_stored: int = 0,
+    error_message: str = None
+) -> WebLink:
+    """Updates the status and statistics of a WebLink record."""
+    web_link = db.query(WebLink).filter(WebLink.id == link_id).first()
+    if web_link:
+        web_link.status = status
+        web_link.pages_crawled = pages_crawled
+        web_link.chunks_stored = chunks_stored
+        if error_message:
+            web_link.error_message = error_message
+        db.commit()
+        db.refresh(web_link)
+    return web_link
+
+
+def get_web_links_by_college(db: Session, college_slug: str) -> list:
+    """Lists all WebLink records for a college slug."""
+    return db.query(WebLink).filter(WebLink.college_slug == college_slug).order_by(WebLink.created_at.desc()).all()
+
+
+def get_web_link_by_id(db: Session, link_id: int) -> WebLink:
+    """Fetches a single WebLink record by ID."""
+    return db.query(WebLink).filter(WebLink.id == link_id).first()
+
+
+def delete_web_link_by_id(db: Session, link_id: int) -> bool:
+    """Deletes a WebLink record from MySQL."""
+    web_link = db.query(WebLink).filter(WebLink.id == link_id).first()
+    if web_link:
+        db.delete(web_link)
+        db.commit()
+        return True
+    return False
+
+

@@ -45,6 +45,39 @@ def delete_documents_by_source(college_slug: str, source_file: str) -> int:
     return len(ids_to_delete)
 
 
+def delete_documents_by_root_url(college_slug: str, root_url: str) -> int:
+    """
+    Deletes all chunks in the college's ChromaDB collection that match
+    root_url in metadata (or source_file).
+    Used when an admin deletes an ingested website link.
+    """
+    vectorstore = get_college_vectorstore(college_slug)
+    collection = vectorstore._collection
+
+    ids_to_delete = set()
+
+    # Match by metadata 'root_url'
+    res1 = collection.get(where={"root_url": root_url})
+    if res1 and res1.get("ids"):
+        ids_to_delete.update(res1["ids"])
+
+    # Match by metadata 'source_file'
+    res2 = collection.get(where={"source_file": root_url})
+    if res2 and res2.get("ids"):
+        ids_to_delete.update(res2["ids"])
+
+    final_ids = list(ids_to_delete)
+    if final_ids:
+        collection.delete(ids=final_ids)
+        logger.info(
+            f"[ChromaDB] Deleted {len(final_ids)} web chunks for "
+            f"root_url='{root_url}' in collection 'college_{college_slug}'"
+        )
+
+    return len(final_ids)
+
+
+
 def add_documents_to_college(college_slug: str, chunks: list):
     """
     Adds a list of Document chunks to the college's vector store.

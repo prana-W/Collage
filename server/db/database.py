@@ -30,7 +30,9 @@ def get_db():
 def init_db():
     """Initializes database tables if they do not exist."""
     try:
+        import db.models  # Register models with Base.metadata
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified/created successfully.")
     except Exception as e:
         logger.warning(f"Could not initialize MySQL database tables: {e}. Check if MySQL is running and the database '{settings.MYSQL_DB}' exists.")
+

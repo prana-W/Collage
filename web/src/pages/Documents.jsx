@@ -10,7 +10,10 @@ import {
   Clock,
   AlertCircle,
   CheckCircle2,
-  FileCheck
+  FileCheck,
+  Globe,
+  Loader2,
+  Layers
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,20 +22,30 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 const API_BASE_URL = `${BASE_URL}/documents`;
+const WEB_API_BASE_URL = `${BASE_URL}/ingest/web`;
 
 const Documents = () => {
   const { user, token } = useAuth();
   const collegeSlug = user?.college_slug || '';
+  
+  const [activeTab, setActiveTab] = useState('pdfs'); // 'pdfs' | 'weblinks'
   const [documents, setDocuments] = useState([]);
+  const [webLinks, setWebLinks] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isWebLoading, setIsWebLoading] = useState(false);
+  
+  // Deletion modals
   const [deletingFile, setDeletingFile] = useState(null);
   const [documentToDelete, setDocumentToDelete] = useState(null);
+
+  const [deletingWebLink, setDeletingWebLink] = useState(null);
+  const [webLinkToDelete, setWebLinkToDelete] = useState(null);
+
   const [message, setMessage] = useState(null);
 
   const fetchDocuments = async () => {
     if (!collegeSlug) return;
     setIsLoading(true);
-    setMessage(null);
 
     try {
       const response = await fetch(`${API_BASE_URL}/list/${collegeSlug}`, {
@@ -56,11 +69,38 @@ const Documents = () => {
     }
   };
 
+  const fetchWebLinks = async () => {
+    if (!collegeSlug) return;
+    setIsWebLoading(true);
+
+    try {
+      const response = await fetch(`${WEB_API_BASE_URL}/links/${collegeSlug}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to fetch web links.');
+      }
+
+      const data = await response.json();
+      setWebLinks(data.links || []);
+    } catch (err) {
+      console.error('Error fetching web links:', err);
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setIsWebLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchDocuments();
+    fetchWebLinks();
   }, [collegeSlug]);
 
-  const confirmDelete = async () => {
+  const confirmDeleteDocument = async () => {
     if (!documentToDelete) return;
 
     const storedName = documentToDelete.stored_name;
@@ -86,7 +126,6 @@ const Documents = () => {
         text: `Deleted "${documentToDelete.display_name}" (${data.chunks_purged} vector chunks purged).` 
       });
 
-      // Refresh list
       setDocuments((prev) => prev.filter((doc) => doc.stored_name !== storedName));
     } catch (err) {
       console.error('Error deleting document:', err);
@@ -97,164 +136,361 @@ const Documents = () => {
     }
   };
 
+  const confirmDeleteWebLink = async () => {
+    if (!webLinkToDelete) return;
+
+    const linkId = webLinkToDelete.id;
+    const url = webLinkToDelete.url;
+    setDeletingWebLink(linkId);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`${WEB_API_BASE_URL}/links/${linkId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to delete web link.');
+      }
+
+      const data = await response.json();
+      setMessage({ 
+        type: 'success', 
+        text: `Deleted web link "${url}" (${data.chunks_purged} vector chunks purged from ChromaDB & MySQL).` 
+      });
+
+      setWebLinks((prev) => prev.filter((link) => link.id !== linkId));
+    } catch (err) {
+      console.error('Error deleting web link:', err);
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setDeletingWebLink(null);
+      setWebLinkToDelete(null);
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'completed':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Completed
+          </span>
+        );
+      case 'processing':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-primary/10 text-primary border border-primary/20">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Processing
+          </span>
+        );
+      case 'failed':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-destructive/10 text-destructive border border-destructive/20">
+            <AlertCircle className="w-3.5 h-3.5" /> Failed
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
+            <Clock className="w-3.5 h-3.5" /> Pending
+          </span>
+        );
+    }
+  };
+
   return (
-    <div className="container max-w-5xl mx-auto py-8 px-4 space-y-6">
-      {/* Top Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border/40">
+    <div className="container max-w-6xl mx-auto py-8 px-4 space-y-8">
+      
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
-            <FileCheck className="w-6 h-6 text-primary" />
-            Uploaded Knowledge Base Documents
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Knowledge Base Management
           </h1>
-          <p className="text-muted-foreground text-xs mt-0.5">
-            Manage ingested PDF files and purge vector embeddings from ChromaDB for your institute.
+          <p className="text-sm text-muted-foreground mt-1">
+            View uploaded PDFs and crawled website links. Deleting items purges both metadata and vector store embeddings.
           </p>
         </div>
-
-        {/* Institute Info Badge & Refresh Button */}
-        <div className="flex items-center gap-2.5 bg-card px-3 py-1.5 rounded-xl border border-border/60 shadow-sm">
-          <Building2 className="w-4 h-4 text-primary shrink-0" />
-          <span className="text-xs text-muted-foreground">Institute:</span>
-          <span className="text-xs font-mono font-bold text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
-            {collegeSlug || 'Not Assigned'}
-          </span>
+        
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-4 py-2 text-sm text-foreground">
+            <Building2 className="w-4 h-4 text-primary" />
+            <span className="font-mono text-xs text-primary">{collegeSlug || 'No College'}</span>
+          </div>
+          
           <Button
-            variant="ghost"
-            size="icon"
-            onClick={fetchDocuments}
-            disabled={isLoading}
-            title="Refresh List"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground ml-1"
+            onClick={() => {
+              fetchDocuments();
+              fetchWebLinks();
+            }}
+            variant="outline"
+            className="border-border bg-card text-foreground hover:bg-accent"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading || isWebLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
-      {/* Alert / Notification Message */}
+      {/* Global Notifications */}
       {message && (
-        <div className={`p-4 rounded-xl text-xs font-medium flex items-center gap-2.5 border ${
+        <div className={`p-4 rounded-xl text-sm flex items-center gap-3 border ${
           message.type === 'error' 
-            ? 'bg-destructive/10 border-destructive/30 text-destructive' 
-            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+            ? 'bg-destructive/10 border-destructive/20 text-destructive' 
+            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
         }`}>
           {message.type === 'error' ? (
-            <AlertCircle className="w-4 h-4 shrink-0" />
+            <AlertCircle className="w-5 h-5 shrink-0" />
           ) : (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
           )}
           <span>{message.text}</span>
         </div>
       )}
 
-      {/* Document List Card */}
-      <Card className="border-border/60 shadow-lg bg-card/50 overflow-hidden">
-        <CardHeader className="border-b border-border/40 bg-card/80 py-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <HardDrive className="w-4 h-4 text-primary" />
-              Document Storage & Knowledge Base Index
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-2 p-1.5 bg-muted/50 border border-border rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('pdfs')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'pdfs'
+              ? 'bg-primary text-primary-foreground shadow-md'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          PDF Documents ({documents.length})
+        </button>
+        
+        <button
+          onClick={() => setActiveTab('weblinks')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'weblinks'
+              ? 'bg-primary text-primary-foreground shadow-md'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+          }`}
+        >
+          <Globe className="w-4 h-4" />
+          Crawled Web Links ({webLinks.length})
+        </button>
+      </div>
+
+      {/* Tab 1: PDF Documents List */}
+      {activeTab === 'pdfs' && (
+        <Card className="bg-card border-border shadow-md">
+          <CardHeader className="border-b border-border">
+            <CardTitle className="text-xl text-card-foreground flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              Uploaded PDF Documents
             </CardTitle>
-            <span className="text-xs text-muted-foreground font-mono">
-              Total Files: <strong className="text-foreground">{documents.length}</strong>
-            </span>
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-12 text-center text-muted-foreground text-xs space-y-2">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto text-primary" />
-              <p>Scanning storage for documents matching "{collegeSlug}"...</p>
-            </div>
-          ) : documents.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground text-xs space-y-3">
-              <FileText className="w-10 h-10 mx-auto text-muted-foreground/40" />
-              <p className="text-sm font-medium text-foreground">No Documents Found</p>
-              <p className="max-w-md mx-auto">
-                No PDF files have been uploaded yet for institute <span className="font-mono text-primary font-semibold">"{collegeSlug}"</span>.
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-border/40">
-              {documents.map((doc) => (
-                <div 
-                  key={doc.stored_name}
-                  className="p-4 hover:bg-accent/30 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0 mt-0.5">
-                      <FileText className="w-5 h-5" />
-                    </div>
-
-                    <div className="min-w-0 space-y-1">
-                      <h4 className="text-xs font-semibold text-foreground truncate flex items-center gap-2">
-                        <span>{doc.display_name}</span>
-                      </h4>
-                      <p className="text-[11px] text-muted-foreground font-mono truncate">
-                        Stored as: {doc.stored_name}
-                      </p>
-                      
-                      <div className="flex items-center gap-4 text-[11px] text-muted-foreground pt-0.5">
-                        <span className="flex items-center gap-1">
-                          <HardDrive className="w-3 h-3 text-primary/70" />
-                          {doc.formatted_size}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-primary/70" />
-                          {new Date(doc.uploaded_at).toLocaleString()}
-                        </span>
+            <CardDescription className="text-muted-foreground">
+              PDF files ingested into ChromaDB for {collegeSlug}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
+                <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+                <span>Loading PDF documents...</span>
+              </div>
+            ) : documents.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
+                <FileCheck className="w-10 h-10 text-muted-foreground/40" />
+                <span>No PDF documents ingested yet for {collegeSlug}.</span>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {documents.map((doc) => (
+                  <div
+                    key={doc.stored_name}
+                    className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-10 h-10 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center shrink-0 mt-0.5">
+                        <FileText className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground text-base">{doc.display_name}</h3>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-1">
+                          <span className="flex items-center gap-1 font-mono">
+                            <HardDrive className="w-3.5 h-3.5" />
+                            {doc.formatted_size}
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {new Date(doc.uploaded_at).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <a
-                      href={`${API_BASE_URL}/view/${doc.stored_name}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border/80 bg-background hover:bg-accent hover:border-primary/50 text-foreground transition-colors"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5 text-primary" />
-                      <span>View PDF</span>
-                    </a>
+                    <div className="flex items-center gap-2 self-end md:self-center">
+                      <a
+                        href={`${BASE_URL}/documents/view/${doc.stored_name}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-border bg-card text-foreground hover:bg-accent text-xs gap-1.5"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          View PDF
+                        </Button>
+                      </a>
 
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setDocumentToDelete(doc)}
-                      disabled={deletingFile === doc.stored_name}
-                      className="h-8 text-xs px-3"
-                    >
-                      {deletingFile === doc.stored_name ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <>
-                          <Trash2 className="w-3.5 h-3.5 mr-1" />
-                          <span>Delete</span>
-                        </>
+                      {user?.role === 'admin' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={deletingFile === doc.stored_name}
+                          onClick={() => setDocumentToDelete(doc)}
+                          className="border-destructive/20 bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs gap-1.5"
+                        >
+                          {deletingFile === doc.stored_name ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          Delete
+                        </Button>
                       )}
-                    </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Custom Shadcn Confirm Dialog Modal */}
+      {/* Tab 2: Ingested Web Links List */}
+      {activeTab === 'weblinks' && (
+        <Card className="bg-card border-border shadow-md">
+          <CardHeader className="border-b border-border">
+            <CardTitle className="text-xl text-card-foreground flex items-center gap-2">
+              <Globe className="w-5 h-5 text-primary" />
+              Ingested Website Links
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Official college website URLs crawled and indexed in MySQL and ChromaDB.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isWebLoading ? (
+              <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
+                <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+                <span>Loading web links...</span>
+              </div>
+            ) : webLinks.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
+                <Globe className="w-10 h-10 text-muted-foreground/40" />
+                <span>No website links ingested yet for {collegeSlug}.</span>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {webLinks.map((link) => (
+                  <div
+                    key={link.id}
+                    className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-10 h-10 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center shrink-0 mt-0.5">
+                        <Globe className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-foreground hover:text-primary text-base flex items-center gap-1.5 transition-colors"
+                        >
+                          {link.url}
+                          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                        </a>
+                        
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-1.5">
+                          {getStatusBadge(link.status)}
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Layers className="w-3.5 h-3.5 text-primary" />
+                            Pages: {link.pages_crawled} / {link.max_pages}
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1 font-mono text-emerald-500">
+                            <Database className="w-3.5 h-3.5" />
+                            {link.chunks_stored} Chunks
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Clock className="w-3.5 h-3.5" />
+                            {new Date(link.created_at).toLocaleString()}
+                          </span>
+                        </div>
+
+                        {link.error_message && (
+                          <p className="text-xs text-destructive mt-1">
+                            Error: {link.error_message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end md:self-center">
+                      {user?.role === 'admin' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={deletingWebLink === link.id}
+                          onClick={() => setWebLinkToDelete(link)}
+                          className="border-destructive/20 bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs gap-1.5"
+                        >
+                          {deletingWebLink === link.id ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          Delete Link & Purge Embeddings
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Delete PDF Confirmation Dialog */}
       <ConfirmDialog
-        isOpen={Boolean(documentToDelete)}
+        isOpen={!!documentToDelete}
         onClose={() => setDocumentToDelete(null)}
-        onConfirm={confirmDelete}
-        title={`Delete "${documentToDelete?.display_name || 'Document'}"?`}
-        description={`Are you sure you want to permanently delete this document? This will remove the PDF file from server storage and purge all ${collegeSlug}'s vector embeddings from ChromaDB.`}
-        confirmText="Delete Document"
+        onConfirm={confirmDeleteDocument}
+        title="Delete PDF Document?"
+        description={`Are you sure you want to delete "${documentToDelete?.display_name}"? This action will purge the file from disk and delete all associated vector embeddings in ChromaDB.`}
+        confirmText="Yes, Delete Document"
         cancelText="Cancel"
-        isLoading={Boolean(deletingFile)}
+        variant="destructive"
       />
+
+      {/* Delete Web Link Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!webLinkToDelete}
+        onClose={() => setWebLinkToDelete(null)}
+        onConfirm={confirmDeleteWebLink}
+        title="Delete Web Link & Vector Embeddings?"
+        description={`Are you sure you want to delete the web link "${webLinkToDelete?.url}"? This action will remove the link record from MySQL and purge all associated vector embeddings from ChromaDB for college ${collegeSlug}.`}
+        confirmText="Yes, Delete Link & Embeddings"
+        cancelText="Cancel"
+        variant="destructive"
+      />
+
     </div>
   );
 };

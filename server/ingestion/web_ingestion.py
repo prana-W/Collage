@@ -44,14 +44,16 @@ def _extract_internal_links(html: str, base_url: str) -> list[str]:
     return sorted(links)
 
 
-def _chunk_web_page(markdown: str, url: str, title: str, college_slug: str) -> list[Document]:
+def _chunk_web_page(markdown: str, url: str, title: str, college_slug: str, root_url: str = None) -> list[Document]:
     """
     Split a single page's markdown into chunks using MarkdownTextSplitter
     and inject standard metadata so the RAG retriever can cite the source.
 
-    Metadata schema mirrors the PDF pipeline (source_file → source_url for web):
+    Metadata schema:
         - college_slug  : institute identifier (used for ChromaDB collection routing)
-        - source_url    : the crawled page URL (used for citations & dedup)
+        - root_url      : the official college root URL added by admin
+        - source_url    : the specific crawled page URL (used for citations)
+        - source_file   : set to root_url for source-based purge compatibility
         - source_type   : "web"  (distinguishes from PDF chunks in the collection)
         - title         : page <title>
     """
@@ -61,18 +63,21 @@ def _chunk_web_page(markdown: str, url: str, title: str, college_slug: str) -> l
     )
     raw_chunks = splitter.create_documents([markdown])
 
+    effective_root = root_url or url
     enriched: list[Document] = []
     for chunk in raw_chunks:
         chunk.metadata.update({
             "college_slug":  college_slug,
+            "root_url":      effective_root,
             "source_url":    url,
-            "source_file":   url,          # keeps delete_documents_by_source() working
+            "source_file":   effective_root,
             "source_type":   "web",
             "title":         title or "",
         })
         enriched.append(chunk)
 
     return enriched
+
 
 
 async def ingest_website(
@@ -169,8 +174,9 @@ async def ingest_website(
                         new_links += 1
 
                 # ── Split into chunks ──────────────────────────────
-                chunks = _chunk_web_page(markdown, url, title, college_slug)
+                chunks = _chunk_web_page(markdown, url, title, college_slug, root_url=start_url)
                 all_chunks.extend(chunks)
+
                 pages_crawled += 1
 
                 print(

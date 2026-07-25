@@ -98,3 +98,145 @@ async def get_job_status(job_id: str) -> JSONResponse:
         "result": job.result if status == "completed" else None,
         "error": str(job.latest_result().exc_string) if status == "failed" else None,
     })
+
+
+# ──────────────────────────────────────────────────────────────
+# Web Crawl Ingestion Endpoints
+# ──────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel, HttpUrl
+from fastapi import Depends, BackgroundTasks
+from sqlalchemy.orm import Session
+from db.database import get_db
+from api.v1.auth import get_current_user, User
+from db.crud import create_web_link, update_web_link_status, get_web_links_by_college, get_web_link_by_id, delete_web_link_by_id
+from vectorstore.chroma_client import delete_documents_by_root_url
+from ingestion.web_ingestion import ingest_website
+
+
+class WebIngestRequest(BaseModel):
+    url: str
+    max_pages: int = 10
+    college_slug: str | None = None
+
+
+async def _run_web_ingestion_task(link_id: int, url: str, college_slug: str, max_pages: int):
+    """Background task to run website crawling and update MySQL status."""
+    from db.database import SessionLocal
+    db = SessionLocal()
+    try:
+        update_web_link_status(db, link_id, status="processing")
+        result = await ingest_website(start_url=url, college_slug=college_slug, max_pages=max_pages)
+        update_web_link_status(
+            db,
+            link_id,
+            status="completed",
+            pages_crawled=result.get("pages_crawled", 0),
+            chunks_stored=result.get("chunks_stored", 0)
+        )
+        logger.info(f"Web ingestion finished for link_id={link_id} | {result}")
+    except Exception as e:
+        logger.error(f"Web ingestion failed for link_id={link_id}: {e}", exc_info=True)
+        update_web_link_status(db, link_id, status="failed", error_message=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/web", summary="Ingest a college website link using Crawl4AI")
+async def ingest_web_link(
+    payload: WebIngestRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> JSONResponse:
+    """
+    Ingests a college website URL using Crawl4AI.
+    Renders JavaScript, extracts clean markdown, chunks it, and stores it in ChromaDB.
+    Also tracks the link entry in MySQL. Only Admins can trigger web ingestion.
+    """
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only Admins can trigger website ingestion.")
+
+    clean_url = payload.url.strip()
+    if not (clean_url.startswith("http://") or clean_url.startswith("https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+
+    target_slug = (payload.college_slug or current_user.college_slug or "default").strip().lower()
+
+    if current_user.college_slug and current_user.college_slug.strip().lower() != target_slug:
+        raise HTTPException(status_code=403, detail="You can only ingest web links for your assigned college.")
+
+    max_pages = max(1, min(payload.max_pages, 50))
+
+    # 1. Store initial record in MySQL
+    web_link = create_web_link(
+        db,
+        college_slug=target_slug,
+        url=clean_url,
+        max_pages=max_pages,
+        user_id=current_user.id
+    )
+
+    # 2. Queue background task for web ingestion
+    background_tasks.add_task(_run_web_ingestion_task, web_link.id, clean_url, target_slug, max_pages)
+
+    return JSONResponse(status_code=202, content={
+        "message": f"Website crawling initiated for '{clean_url}'.",
+        "link_id": web_link.id,
+        "college_slug": target_slug,
+        "url": clean_url,
+        "max_pages": max_pages,
+        "status": "processing"
+    })
+
+
+@router.get("/web/links/{college_slug}", summary="List all web links ingested for a college")
+async def list_web_links(
+    college_slug: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> JSONResponse:
+    """Returns all web link entries stored in MySQL for the given college."""
+    clean_slug = college_slug.strip().lower()
+    links = get_web_links_by_college(db, clean_slug)
+    return JSONResponse(content={"links": [link.to_dict() for link in links], "college_slug": clean_slug})
+
+
+@router.delete("/web/links/{link_id}", summary="Delete a web link and purge its vector embeddings")
+async def delete_web_link_endpoint(
+    link_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> JSONResponse:
+    """
+    Deletes a web link from MySQL and purges all associated vector embeddings from ChromaDB.
+    Requires Admin privileges.
+    """
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only Admins can delete web links.")
+
+    web_link = get_web_link_by_id(db, link_id)
+    if not web_link:
+        raise HTTPException(status_code=404, detail=f"Web link with ID {link_id} not found.")
+
+    if current_user.college_slug and current_user.college_slug.strip().lower() != web_link.college_slug.strip().lower():
+        raise HTTPException(status_code=403, detail="Admins can only delete web links for their assigned college.")
+
+    target_slug = web_link.college_slug
+    root_url = web_link.url
+
+    # 1. Purge all chunks from ChromaDB for this root URL
+    chunks_deleted = delete_documents_by_root_url(target_slug, root_url)
+
+    # 2. Delete entry from MySQL
+    delete_web_link_by_id(db, link_id)
+
+    logger.info(f"Deleted WebLink id={link_id} url='{root_url}' | Purged {chunks_deleted} chunks from ChromaDB")
+
+    return JSONResponse(content={
+        "message": f"Successfully deleted web link '{root_url}'.",
+        "link_id": link_id,
+        "url": root_url,
+        "chunks_purged": chunks_deleted
+    })
+
