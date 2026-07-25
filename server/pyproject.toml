@@ -43,4 +43,5 @@ dependencies = [
     "bcrypt",
     "pyjwt",
     "rank-bm25",
+    "crawl4ai>=0.9.2",
 ]

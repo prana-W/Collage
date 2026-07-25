@@ -11,7 +11,10 @@ import {
   Zap, 
   BookOpen, 
   ArrowRight,
-  GraduationCap
+  GraduationCap,
+  Activity,
+  FileCheck,
+  UserCheck
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +28,7 @@ const Home = () => {
       <section className="text-center space-y-6 pt-4">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold tracking-wide">
           <Sparkles className="w-3.5 h-3.5" />
-          Multi-Tenant RAG Knowledge Engine
+          Multi-Tenant RAG Engine with Token Auditing
         </div>
 
         <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-foreground">
@@ -33,7 +36,7 @@ const Home = () => {
         </h1>
 
         <p className="text-lg sm:text-xl font-medium text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-          Bringing scattered institute knowledge into <span className="text-foreground font-semibold">one unified picture</span>.
+          Bringing scattered institute knowledge into <span className="text-foreground font-semibold">one unified picture</span> with complete cost & token transparency.
         </p>
 
         {/* Wordplay Explanation Banner */}
@@ -65,12 +68,20 @@ const Home = () => {
                 </Button>
               </Link>
               {isAdmin && (
-                <Link to="/ingest">
-                  <Button size="lg" variant="outline" className="font-semibold px-6 border-border hover:bg-accent">
-                    <UploadCloud className="w-4 h-4 mr-2" />
-                    PDF Ingestion
-                  </Button>
-                </Link>
+                <>
+                  <Link to="/ingest">
+                    <Button size="lg" variant="outline" className="font-semibold px-6 border-border hover:bg-accent">
+                      <UploadCloud className="w-4 h-4 mr-2" />
+                      PDF Ingestion
+                    </Button>
+                  </Link>
+                  <Link to="/documents">
+                    <Button size="lg" variant="outline" className="font-semibold px-6 border-border hover:bg-accent">
+                      <FileCheck className="w-4 h-4 mr-2" />
+                      Manage Docs
+                    </Button>
+                  </Link>
+                </>
               )}
             </>
           ) : (
@@ -92,42 +103,55 @@ const Home = () => {
       </section>
 
       {/* Feature Cards Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4">
         {/* Feature 1 */}
         <Card className="border-border/60 shadow-md bg-card hover:border-primary/40 transition-colors">
           <CardHeader>
             <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-2">
               <GraduationCap className="w-5 h-5" />
             </div>
-            <CardTitle className="text-lg">Multi-Tenant Isolation</CardTitle>
+            <CardTitle className="text-base">Multi-Tenant Isolation</CardTitle>
             <CardDescription className="text-xs">
-              Every college operates independently using isolated college slugs (<span className="font-mono text-primary">nitjsr</span>, <span className="font-mono text-primary">iitb</span>) in ChromaDB.
+              Institutes operate independently using isolated college slugs (<span className="font-mono text-primary">nitjsr</span>, <span className="font-mono text-primary">iitb</span>) in ChromaDB.
             </CardDescription>
           </CardHeader>
         </Card>
 
-        {/* Feature 2 */}
+        {/* Feature 2: Token Auditing */}
         <Card className="border-border/60 shadow-md bg-card hover:border-primary/40 transition-colors">
           <CardHeader>
             <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-2">
-              <Zap className="w-5 h-5" />
+              <Zap className="w-5 h-5 text-amber-500" />
             </div>
-            <CardTitle className="text-lg">Async Processing Queue</CardTitle>
+            <CardTitle className="text-base">Real-Time Token Auditing</CardTitle>
             <CardDescription className="text-xs">
-              Heavy PDF parsing and RapidOCR text extraction run asynchronously via Redis Queue (RQ) worker processes without blocking the main API thread.
+              Tracks precise token consumption across Query Enhancer, Embedding search, RAG context, and LLM output streams.
             </CardDescription>
           </CardHeader>
         </Card>
 
-        {/* Feature 3 */}
+        {/* Feature 3: Dual Purge Vector Store */}
         <Card className="border-border/60 shadow-md bg-card hover:border-primary/40 transition-colors">
           <CardHeader>
             <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-2">
-              <ShieldCheck className="w-5 h-5" />
+              <FileCheck className="w-5 h-5" />
             </div>
-            <CardTitle className="text-lg">Zero-Hallucination Answers</CardTitle>
+            <CardTitle className="text-base">Dual Vector Cleanup</CardTitle>
             <CardDescription className="text-xs">
-              Strict context-grounded prompts force the LLM to answer using only ingested documents, complete with precise source and page citations.
+              Admin deletions purge physical PDF files from storage while removing all matching vector chunks from ChromaDB collections.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+
+        {/* Feature 4: Grounded Guardrails */}
+        <Card className="border-border/60 shadow-md bg-card hover:border-primary/40 transition-colors">
+          <CardHeader>
+            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-500" />
+            </div>
+            <CardTitle className="text-base">Zero-Hallucination RAG</CardTitle>
+            <CardDescription className="text-xs">
+              Strict context-grounded prompts force the LLM to answer using only ingested documents with 1-indexed citations.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -168,10 +192,10 @@ const Home = () => {
           <div className="p-4 rounded-xl bg-muted/30 border border-border/50 space-y-2">
             <div className="font-bold text-primary flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs">3</span>
-              Real-Time Query Assistant
+              Real-Time Query & Analytics
             </div>
             <p className="text-muted-foreground">
-              Students and faculty ask questions and receive streamed, token-by-token answers backed by page-level document citations.
+              Students and faculty receive streamed, cite-backed answers with live token accounting and user profile analytics.
             </p>
           </div>
         </div>

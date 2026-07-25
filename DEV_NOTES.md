@@ -77,7 +77,24 @@ This document tracks the architectural decisions, features built, and system evo
   - `/documents` — Uploaded Document Management & Vector Chunk Purging (Admin Only).
   - `/query` — Real-time RAG Query Assistant with Interactive Source PDF Citations (Authenticated Users & Admins).
   - `/login` & `/register` — Account authentication & role creation.
-- **CSS Token System (`index.css`)**: Built entirely with Tailwind CSS theme tokens (`bg-background`, `text-foreground`, `bg-card`, `bg-primary`, `border-border`, etc.) so changing CSS variables instantly re-themes the entire application.
+### 10. End-to-End RAG Token Usage Auditing & Analytics (`token_counter.py` & `rag_chain.py`)
+- **Multi-Stage Token Counter**: Tracks token consumption across all 4 stages of a RAG query:
+  1. **Query Enhancer**: Prompt & rewritten question token count.
+  2. **Embedding Model**: Dense vector query representation tokens.
+  3. **RAG Prompt & Context**: System prompt + formatted context payload tokens.
+  4. **LLM Output Stream**: Real-time answer generation completion tokens.
+- Uses `tiktoken` (`cl100k_base` / `o200k_base`) with character-ratio fallbacks for local and cloud models.
+- Streams a final JSON token usage audit object (`__TOKEN_USAGE__:{...}`) over the SSE text stream.
+
+### 11. Database Token Accounting & User Analytics (`db/models.py` & `db/crud.py`)
+- **Cumulative Persistence**: Added `total_tokens_used` columns to both `User` and `College` models in MySQL via SQLAlchemy ORM.
+- **Atomic Increments**: `record_token_usage()` increments user and institute token totals after each query stream completes.
+- **Account Profile Modal (`ProfileModal.jsx`)**: Rendered via `ReactDOM.createPortal` (escaping backdrop-blur stacking contexts). Displays user details, assigned institute, account creation date, and total cumulative tokens consumed with a live refresh button.
+
+### 12. Dual-Purge Vector Storage Cleanup & Custom Confirm Dialog (`documents.py` & `confirm-dialog.jsx`)
+- **Dual Cleanup**: Deleting an institute document purges the physical file from `storage/uploads` AND deletes all corresponding vector chunks from the ChromaDB collection using `source_file` metadata filtering.
+- **Shadcn Confirm Dialog**: Replaced default browser `window.confirm()` with an accessible Tailwind/Shadcn confirmation modal.
+- **Centralized Environment URLs**: Migrated hardcoded API base URLs across all frontend components (`AuthContext`, `Documents`, `Ingest`, `Query`) to consume `VITE_API_BASE_URL`.
 
 ---
 
@@ -108,6 +125,81 @@ npm run dev
 
 ---
 
+### 13. Manual Web Crawling Tool (`crawl_tool.py`)
+- **Purpose**: Standalone CLI script for manual testing of college website crawling. Stores results in a `results[]` array for inspection without touching ChromaDB.
+- **Technology**: [Crawl4AI](https://github.com/unclecode/crawl4ai) 0.9.2 — Playwright-based headless browser with stealth mode to bypass anti-bot protections on JavaScript-rendered university websites.
+- **Features**:
+  - BFS (Breadth-First Search) crawling following internal links up to `max_pages` limit.
+  - Stealth mode (`enable_stealth=True`) + `magic=True` for JS-rendered React/Angular university sites.
+  - Internal link extraction via BeautifulSoup parsing of rendered HTML (handles JS-rendered anchor tags).
+  - Excludes nav, footer, scripts, styles to reduce noise.
+  - Per-page result dict: `url`, `title`, `markdown`, `links`, `success`, `error`.
+- **Usage**: `uv run python crawl_tool.py <URL> [max_pages]`
+
+### 14. Web Content Ingestion Pipeline (`ingestion/web_ingestion.py`)
+- **Purpose**: Full ingestion pipeline that crawls a college website and stores the content in ChromaDB alongside PDF chunks — searchable via the same RAG query interface.
+- **Pipeline Flow**: `URL → Crawl4AI (JS render, stealth) → BFS internal link discovery → MarkdownTextSplitter → metadata injection → ChromaDB`
+- **Chunking**: Uses `MarkdownTextSplitter` with the same `CHUNK_SIZE` / `CHUNK_OVERLAP` from `settings.py` as the PDF pipeline.
+- **Metadata Schema** (per chunk):
+  - `college_slug` — routes to the correct ChromaDB collection.
+  - `source_file` — set to the crawled URL; enables `delete_documents_by_source()` dedup on re-crawl.
+  - `source_url` — full page URL used for query citations.
+  - `source_type` — `"web"` (distinguishes web vs. PDF chunks for future filtering).
+  - `title` — page `<title>` tag content.
+- **Key Design**: Web chunks go into the same `college_{slug}` ChromaDB collection as PDFs. A single RAG query searches both sources simultaneously.
+- **Usage**: `uv run python ingestion/web_ingestion.py <URL> <college_slug> [max_pages]`
+- **Planned Enhancements**: Sitemap-first URL discovery, URL pattern filtering, concurrent crawling with `arun_many()`, PDF link harvesting, content dedup via hashing, crawl depth limiting.
+
+---
+
+## Startup Instructions
+
+### 1. Redis Server
+```bash
+redis-server
+```
+
+### 2. RQ Background Worker
+```bash
+cd server
+uv run rq worker
+```
+
+### 3. FastAPI Backend Server
+```bash
+cd server
+uv run uvicorn app:app --reload
+```
+
+### 4. React Frontend
+```bash
+cd web
+npm run dev
+```
+
+### 5. Web Ingestion (Manual CLI)
+```bash
+cd server
+uv run python ingestion/web_ingestion.py <URL> <college_slug> [max_pages]
+# Example:
+uv run python ingestion/web_ingestion.py https://nitjsr.ac.in nit-jamshedpur 15
+```
+
+### 6. Web Crawler Test Tool (Manual CLI)
+```bash
+cd server
+uv run python crawl_tool.py <URL> [max_pages]
+# Example:
+uv run python crawl_tool.py https://nitjsr.ac.in 10
+```
+
+---
+
 ## Future Roadmap / Pending Items
 - Add multi-turn conversational memory using `RedisChatMessageHistory` and `RunnableWithMessageHistory`.
 - Containerize FastAPI, Redis, MySQL, and RQ Worker with `docker-compose`.
+- Implement sitemap.xml-first URL discovery in `web_ingestion.py`.
+- Add URL pattern filter (`allow_patterns`) to restrict web crawling to relevant site sections.
+- Implement concurrent page crawling via Crawl4AI `arun_many()` for 3–5× speed improvement.
+- Auto-detect and harvest `.pdf` links found during web crawling → route them to `pdf_ingestion.py`.
+- Expose web ingestion as an admin API endpoint (similar to the PDF ingestion endpoint).
