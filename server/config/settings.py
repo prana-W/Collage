@@ -50,8 +50,11 @@ class Settings:
     IMAGE_OUTPUT_DIR: str = os.getenv("IMAGE_OUTPUT_DIR", os.path.join(STORAGE_DIR, "images"))
 
     # Ingestion & Chunking Config
-    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", 1000))
-    CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", 200))
+    # CHUNK_SIZE is passed as max_tokens to HybridChunker.
+    # BAAI/bge-small-en-v1.5 (our HybridChunker tokenizer) has a 512-token context window,
+    # so chunks must stay at or below 512 tokens to avoid truncation during embedding.
+    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", 512))
+    CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", 100))
 
     @property
     def embedding_model(self):
