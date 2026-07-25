@@ -34,11 +34,12 @@ This document tracks the architectural decisions, features built, and system evo
 - Partitioned by `college_slug` (e.g., `college_nitjsr`, `college_iitb`).
 - Prevents cross-contamination of data; when querying for `nitjsr`, the vector store physically cannot access `iitb` documents.
 
-### 4. Advanced PDF Ingestion with Local OCR & RQ Async Queue (`pdf_ingestion.py`)
-- Uses `PyPDFLoader` wrapped with `RapidOCRBlobParser` for ONNX-based local OCR.
-- **Chunking**: `RecursiveCharacterTextSplitter` breaking documents into overlapping chunks (`size=1000, overlap=200`).
-- **Metadata Injection**: Injects `source_file`, `page` number, and `college_slug`.
-- **Async Queue**: Enqueues files via Redis Queue (RQ worker) returning job status (`queued`, `processing`, `completed`, `failed`). Polled every 5 seconds on the frontend dashboard.
+### 4. Advanced PDF Ingestion with Docling, HybridChunker & RQ Async Queue (`pdf_ingestion.py`)
+- **Docling Integration**: Uses `DoclingLoader` for layout-aware document extraction (headings, reading order, and table structures).
+- **Semantic Hybrid Chunking**: Employs Docling's `HybridChunker` backed by the `BAAI/bge-small-en-v1.5` tokenizer (512-token context window limit) for semantically bounded, context-aware chunks without needing ad-hoc character splitters.
+- **ChromaDB Metadata Flattening (`_flatten_docling_metadata`)**: Automatically converts Docling's complex nested `dl_meta` structures into flat scalar metadata (`page_no`, `headings`, `origin_filename`, `source_file`), preventing ChromaDB vector store insertion errors.
+- **Environment & Logging Guard**: Sets `TOKENIZERS_PARALLELISM=false` and `TRANSFORMERS_VERBOSITY=error` to suppress internal HuggingFace parallelism locks and cosmetic token sequence warnings.
+- **Async Queue & Timeouts**: Enqueues PDF jobs via Redis Queue (RQ worker) with an extended 30-minute (`1800s`) `job_timeout` to handle large multi-page PDFs cleanly without worker job timeout kills. Front-end polls job status every 5 seconds.
 
 ### 5. LLM Query Enhancer & Rewriter (`query_enhancer.py`)
 - Standalone LangChain LCEL pipeline (`ENHANCER_PROMPT | llm_model | StrOutputParser()`).
