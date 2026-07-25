@@ -26,7 +26,7 @@ def _chunk_documents(docs):
     return chunks
 
 
-def process_pdfs(pdf_file_names: list[str], college_slug: str, base_dir: str = "../data") -> list:
+def process_pdfs(pdf_file_names: list[str], college_slug: str, base_dir: str = None) -> list:
     """
     Main orchestration function:
     1. Load PDFs with RapidOCR for text + image OCR extraction
@@ -37,9 +37,11 @@ def process_pdfs(pdf_file_names: list[str], college_slug: str, base_dir: str = "
         pdf_file_names: List of PDF filenames (not full paths).
         college_slug:   Unique identifier for the college/institute.
         base_dir:       Directory where the PDF files are located.
-                        Defaults to '../data' for the test CLI.
-                        The API worker passes 'storage/uploads'.
+                        Defaults to settings.UPLOAD_DIR.
     """
+    if base_dir is None:
+        base_dir = settings.UPLOAD_DIR
+
     all_docs = []
     for pdf_name in pdf_file_names:
         file_path = os.path.join(base_dir, pdf_name)

@@ -47,22 +47,35 @@ This document tracks the architectural decisions, features built, and system evo
   - *Example*: `"exam date"` $\rightarrow$ `"What is the exam date?"`
 - Runs seamlessly prior to vector search in `build_rag_chain()`.
 
-### 6. Strict Guardrails & Memory-less RAG Chain (`rag_chain.py` & `rag_prompt.py`)
+### 6. Hybrid Retrieval System (`retriever.py`)
+- Combines **Sparse Lexical Search** (BM25) and **Dense Semantic Search** (MMR via ChromaDB) into a hybrid pipeline using LangChain's `EnsembleRetriever`.
+- Uses **Reciprocal Rank Fusion (RRF)** to merge and re-rank document chunks.
+- **Priority Weighting**: Configured with `BM25 = 0.6` (60% weight for exact keyword matching like course codes, notice dates, and names) and `MMR = 0.4` (40% weight for dense semantic understanding and chunk diversity).
+
+### 7. Strict Guardrails & Memory-less RAG Chain (`rag_chain.py` & `rag_prompt.py`)
 - Built using LangChain Expression Language (LCEL).
 - **Strict Context Boundary**: System prompt explicitly forbids the LLM from using its internal pre-trained memory or general training data about the institute or any topic.
 - **Zero-Vector Fallback**: If vector search returns 0 relevant chunks, context is set to `NO_RELEVANT_DOCUMENTS_FOUND` and the assistant answers strictly: *"I could not find relevant information in the uploaded institute documents to answer your query."*
 - **Citations**: Returns 1-indexed source document and page number citations at the end of answers.
 - **Real-Time Streaming**: Token-by-token streaming via `StreamingResponse` for smooth real-time answers.
 
-### 7. React Frontend with AuthContext & Role-Based Access Control
+### 8. Document Serving & Admin Document Management (`documents.py` & `Documents.jsx`)
+- **Public Document Viewer (`GET /api/v1/documents/view/{filename}`)**: Serves PDFs inline (`Content-Disposition: inline`) from `storage/uploads` so any user can click source citations in the query assistant to open the exact source PDF in a new tab.
+- **Admin Document Dashboard (`/documents`)**:
+  - Lists all uploaded PDF files matching the admin's `college_slug`.
+  - Displays file size, upload timestamp, and inline PDF view link.
+  - **Secure Deletion (`DELETE /api/v1/documents/{college_slug}/{filename}`)**: Admin-restricted endpoint that validates the admin's assigned `college_slug` before deleting the file from disk AND purging all vector chunks from ChromaDB.
+
+### 9. React Frontend with AuthContext & Role-Based Access Control
 - **`AuthContext.jsx`**: Global React Context managing user sessions, roles (`admin` vs `user`), and JWT persistence in `localStorage`.
 - **`ProtectedRoute.jsx`**: Route guard component restricting access:
-  - **`Admin` Role**: Exclusive access to PDF Ingestion (`/ingest`).
+  - **`Admin` Role**: Exclusive access to PDF Ingestion (`/ingest`) and Document Management (`/documents`).
   - **`User` / `Admin` Role**: Access to Query Assistant (`/query`) with automatic pre-filling of `college_slug`.
 - **Restructured Navigation**:
   - `/` — COLLAGE Landing Page introducing the platform philosophy & workflow.
   - `/ingest` — PDF Drag-and-Drop Ingestion & RQ Job Polling Tracker (Admin Only).
-  - `/query` — Real-time RAG Query Assistant (Authenticated Users & Admins).
+  - `/documents` — Uploaded Document Management & Vector Chunk Purging (Admin Only).
+  - `/query` — Real-time RAG Query Assistant with Interactive Source PDF Citations (Authenticated Users & Admins).
   - `/login` & `/register` — Account authentication & role creation.
 - **CSS Token System (`index.css`)**: Built entirely with Tailwind CSS theme tokens (`bg-background`, `text-foreground`, `bg-card`, `bg-primary`, `border-border`, etc.) so changing CSS variables instantly re-themes the entire application.
 

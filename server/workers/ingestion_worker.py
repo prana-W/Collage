@@ -20,10 +20,12 @@ def run_ingestion_job(college_slug: str, file_names: list[str]) -> dict:
     Returns:
         A dict summary of the completed job (stored by RQ as the job result).
     """
+    from config.settings import settings
     from ingestion.pdf_ingestion import process_pdfs
     from vectorstore.chroma_client import add_documents_to_college
 
-    chunks = process_pdfs(file_names, college_slug, base_dir=UPLOAD_DIR)
+    upload_dir = settings.UPLOAD_DIR
+    chunks = process_pdfs(file_names, college_slug, base_dir=upload_dir)
     add_documents_to_college(college_slug, chunks)
 
     return {

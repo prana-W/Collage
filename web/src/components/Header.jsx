@@ -10,7 +10,8 @@ import {
   Shield, 
   GraduationCap,
   LogIn,
-  UserPlus
+  UserPlus,
+  FileCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -57,21 +58,37 @@ const Header = () => {
           {/* Logged-in Links */}
           {isAuthenticated && (
             <>
-              {/* Ingestion is for Admins only */}
+              {/* Ingestion & Documents are for Admins only */}
               {isAdmin && (
-                <NavLink
-                  to="/ingest"
-                  className={({ isActive }) =>
-                    `flex items-center gap-1.5 py-1.5 px-3 rounded-md transition-colors text-xs font-medium ${
-                      isActive
-                        ? 'bg-primary/10 text-primary font-semibold'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                    }`
-                  }
-                >
-                  <UploadCloud className="w-3.5 h-3.5" />
-                  PDF Ingestion
-                </NavLink>
+                <>
+                  <NavLink
+                    to="/ingest"
+                    className={({ isActive }) =>
+                      `flex items-center gap-1.5 py-1.5 px-3 rounded-md transition-colors text-xs font-medium ${
+                        isActive
+                          ? 'bg-primary/10 text-primary font-semibold'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                      }`
+                    }
+                  >
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    PDF Ingestion
+                  </NavLink>
+
+                  <NavLink
+                    to="/documents"
+                    className={({ isActive }) =>
+                      `flex items-center gap-1.5 py-1.5 px-3 rounded-md transition-colors text-xs font-medium ${
+                        isActive
+                          ? 'bg-primary/10 text-primary font-semibold'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                      }`
+                    }
+                  >
+                    <FileCheck className="w-3.5 h-3.5" />
+                    Manage Docs
+                  </NavLink>
+                </>
               )}
 
               {/* Query Assistant is for logged-in users and admins */}

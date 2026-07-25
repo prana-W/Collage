@@ -9,7 +9,8 @@ import {
   BookOpen, 
   HelpCircle,
   FileText,
-  Trash2
+  Trash2,
+  ExternalLink
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,49 @@ import { Label } from "@/components/ui/label";
 
 import { useAuth } from '@/context/AuthContext';
 
-const API_QUERY_URL = 'http://localhost:8000/api/v1/query/stream';
+const API_VIEW_DOC_URL = 'http://localhost:8000/api/v1/documents/view';
+
+const renderFormattedMessage = (text) => {
+  if (!text) return null;
+
+  // Regex matches any filename ending in .pdf
+  const pdfRegex = /\b([a-zA-Z0-9_\-]+\.pdf)\b/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = pdfRegex.exec(text)) !== null) {
+    const pdfName = match[1];
+    const matchIndex = match.index;
+
+    if (matchIndex > lastIndex) {
+      parts.push(text.substring(lastIndex, matchIndex));
+    }
+
+    parts.push(
+      <a
+        key={`${pdfName}-${matchIndex}`}
+        href={`${API_VIEW_DOC_URL}/${encodeURIComponent(pdfName)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={`View document: ${pdfName}`}
+        className="inline-flex items-center gap-1 font-mono text-[11px] px-1.5 py-0.5 mx-0.5 rounded bg-primary/10 border border-primary/30 text-primary hover:underline hover:bg-primary/20 transition-colors"
+      >
+        <FileText className="w-3 h-3 shrink-0" />
+        <span>{pdfName}</span>
+        <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+      </a>
+    );
+
+    lastIndex = matchIndex + pdfName.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts;
+};
 
 const Query = () => {
   const { user, token } = useAuth();
@@ -235,7 +278,9 @@ const Query = () => {
 
                     {/* Message Body */}
                     <div className="whitespace-pre-wrap leading-relaxed text-sm">
-                      {msg.text || (
+                      {msg.text ? (
+                        renderFormattedMessage(msg.text)
+                      ) : (
                         <span className="inline-flex items-center gap-2 text-muted-foreground italic text-xs">
                           <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
                           Searching knowledge base & generating answer...

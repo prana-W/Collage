@@ -42,4 +42,5 @@ dependencies = [
     "pymysql",
     "bcrypt",
     "pyjwt",
+    "rank-bm25",
 ]

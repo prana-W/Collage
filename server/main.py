@@ -3,7 +3,7 @@ from vectorstore.chroma_client import add_documents_to_college
 from llm.rag_chain import ask
 
 if __name__ == "__main__":
-    college_slug = "nitjsr"
+    college_slug = "nit-jamshedpur"
 
     # --- INGESTION ---
     # Uncomment to re-ingest PDFs into the vector store

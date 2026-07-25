@@ -42,10 +42,16 @@ class Settings:
     OLLAMA_LLM_MODEL: str = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
     GEMINI_LLM_MODEL: str = os.getenv("GEMINI_LLM_MODEL", "gemini-1.5-flash")
     
+    # Storage & Path Config
+    SERVER_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    PROJECT_ROOT: str = os.path.abspath(os.path.join(SERVER_DIR, ".."))
+    STORAGE_DIR: str = os.getenv("STORAGE_DIR", os.path.join(PROJECT_ROOT, "storage"))
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(STORAGE_DIR, "uploads"))
+    IMAGE_OUTPUT_DIR: str = os.getenv("IMAGE_OUTPUT_DIR", os.path.join(STORAGE_DIR, "images"))
+
     # Ingestion & Chunking Config
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", 1000))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", 200))
-    IMAGE_OUTPUT_DIR: str = os.getenv("IMAGE_OUTPUT_DIR", "storage/images")
 
     @property
     def embedding_model(self):

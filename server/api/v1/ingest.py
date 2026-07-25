@@ -8,11 +8,13 @@ from rq.exceptions import NoSuchJobError
 from workers.ingestion_queue import get_queue, get_redis
 from workers.ingestion_worker import run_ingestion_job
 
+from config.settings import settings
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/ingest", tags=["Ingestion"])
 
-UPLOAD_DIR = "storage/uploads"
+UPLOAD_DIR = settings.UPLOAD_DIR
 
 # Map RQ's internal status strings to friendlier ones
 _STATUS_MAP = {
