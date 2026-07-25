@@ -50,6 +50,53 @@ async def query_knowledge_base(
         raise HTTPException(status_code=500, detail=f"Failed to generate answer: {str(e)}")
 
 
+MOCK_RESPONSE = """### How to Reach NIT Jamshedpur
+
+The best way to reach NIT Jamshedpur is by **bus**. Here's the detailed recommendation:
+
+1. **From Jamshedpur Main Bus Stand (Sakchi):**
+   - Take a bus to **Adityapur** (approximately 10 km from Jamshedpur bus stand).
+   - Reserve an auto (vehicle) to the campus for convenience, as the fare is **Rs. 150**.
+   - The Institute Administrative Building is **3.5 km** from Adityapur-1 (via NIT MORE route).
+
+2. **From Ranchi:**
+   - Take a bus to **Jamshedpur** via NH-33 (distance: ~140 km).
+   - Road transport is faster and more direct than the train journey of **167 km (4–5 hours)**.
+
+### Alternative Routes
+
+- From **Bistupur**, take an auto to **Adityapur** and follow the NIT MORE route (2 km from All India Radio Building).
+- From **Tatanagar Railway Station**, travel to **Bistupur** and then take an auto to the campus.
+
+### Recommendation
+
+For convenience and cost-effectiveness, **reserve an auto from the Jamshedpur Main Bus Stand (Sakchi)** to the campus. This ensures a direct and comfortable journey."""
+
+MOCK_SOURCES = [
+    "https://www.nitjsr.ac.in",
+    "nitjsr_prospectus_2024.pdf"
+]
+
+import json
+import asyncio
+
+
+async def _mock_stream():
+    """Streams the mock response word-by-word for realistic testing."""
+    words = MOCK_RESPONSE.split(' ')
+    for i, word in enumerate(words):
+        suffix = ' ' if i < len(words) - 1 else ''
+        yield (word + suffix).encode()
+        await asyncio.sleep(0.02)
+
+    audit_payload = {
+        "total_tokens": 342,
+        "user_cumulative_total": 342,
+        "sources": MOCK_SOURCES
+    }
+    yield f"\n\n__TOKEN_USAGE__:{json.dumps(audit_payload)}".encode()
+
+
 @router.post("/stream", summary="Ask a question with token streaming")
 async def stream_query_knowledge_base(
     request: QueryRequest,
@@ -58,11 +105,17 @@ async def stream_query_knowledge_base(
     """
     Streams tokens in real-time using Server-Sent Events (SSE) / text stream. Requires Bearer Token.
     Appends token audit metrics and sources list at the end of the stream.
+    Use question="pranaw-is-testing" to get a fast mock response without calling the LLM.
     """
     if not request.college_slug.strip():
         raise HTTPException(status_code=400, detail="college_slug cannot be empty.")
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="question cannot be empty.")
+
+    # --- DEV MOCK: bypass LLM for fast UI testing ---
+    if request.question.strip().lower() == "pranaw-is-testing":
+        logger.info("[DEV MOCK] Returning mock stream response.")
+        return StreamingResponse(_mock_stream(), media_type="text/plain")
 
     try:
         generator = stream_rag_with_token_audit(
