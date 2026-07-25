@@ -138,11 +138,7 @@ const Query = () => {
     return () => el.removeEventListener('scroll', handler);
   }, []);
 
-  useEffect(() => {
-    if (!userScrolledUp.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
+  /* Remove automatic scroll on every token update so user can scroll freely */
 
   /* ── Auto-resize textarea ── */
   const resizeTextarea = () => {
@@ -174,6 +170,11 @@ const Query = () => {
     if (textareaRef.current) textareaRef.current.style.height = '52px';
     setIsGenerating(true);
     userScrolledUp.current = false;
+
+    // Scroll down once when question is submitted
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
 
     const controller = new AbortController();
     abortRef.current = controller;

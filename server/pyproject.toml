@@ -44,4 +44,5 @@ dependencies = [
     "pyjwt",
     "rank-bm25",
     "crawl4ai>=0.9.2",
+    "langchain-docling>=2.0.0",
 ]

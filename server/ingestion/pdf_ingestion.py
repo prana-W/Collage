@@ -1,65 +1,81 @@
 import os
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.document_loaders.parsers.pdf import RapidOCRBlobParser
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+import logging
+
+# Suppress HuggingFace tokenizer parallelism warning emitted by Docling internals
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+from langchain_docling import DoclingLoader
+from langchain_docling.loader import ExportType
+from docling.chunking import HybridChunker
 from config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["process_pdfs"]
 
+# BAAI/bge-small-en-v1.5:
+#   - 90MB tokenizer, 512-token context window
+#   - Designed for retrieval/RAG tasks
+#   - Used ONLY to count tokens for chunk boundary decisions —
+#     the actual vector store embeddings still use Ollama.
+CHUNKER_TOKENIZER = "BAAI/bge-small-en-v1.5"
 
-def _inject_metadata(documents, extra_metadata):
+
+def _inject_metadata(documents, extra_metadata: dict) -> list:
     for doc in documents:
         doc.metadata.update(extra_metadata)
     return documents
 
 
-def _chunk_documents(docs):
-    """
-    Splits all documents into smaller chunks using RecursiveCharacterTextSplitter.
-    Since PyPDFLoader outputs plain text (not markdown), we use character splitting directly.
-    """
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=settings.CHUNK_SIZE,
-        chunk_overlap=settings.CHUNK_OVERLAP
-    )
-    chunks = splitter.split_documents(docs)
-    return chunks
-
-
 def process_pdfs(pdf_file_names: list[str], college_slug: str, base_dir: str = None) -> list:
     """
-    Main orchestration function:
-    1. Load PDFs with RapidOCR for text + image OCR extraction
-    2. Chunk the extracted text
-    3. Inject college_slug metadata into all chunks
+    Loads PDFs using Docling (DoclingLoader + HybridChunker).
+
+    Docling handles:
+      - Layout-aware text extraction (headings, tables, figures, reading order)
+      - Semantic chunking via HybridChunker using BAAI/bge-small-en-v1.5 tokenizer
+        so chunks respect the 512-token context window of retrieval models
+
+    No separate text splitter is needed — HybridChunker produces chunks
+    that are already semantically coherent and token-bounded.
 
     Args:
         pdf_file_names: List of PDF filenames (not full paths).
         college_slug:   Unique identifier for the college/institute.
-        base_dir:       Directory where the PDF files are located.
+        base_dir:       Directory where PDF files are stored.
                         Defaults to settings.UPLOAD_DIR.
     """
     if base_dir is None:
         base_dir = settings.UPLOAD_DIR
 
-    all_docs = []
+    chunker = HybridChunker(
+        tokenizer=CHUNKER_TOKENIZER,
+        max_tokens=settings.CHUNK_SIZE,
+    )
+
+    all_chunks = []
     for pdf_name in pdf_file_names:
         file_path = os.path.join(base_dir, pdf_name)
-        print(f"  Loading: {file_path}")
-        loader = PyPDFLoader(
+        logger.info(f"[DoclingLoader] Loading: {file_path}")
+
+        loader = DoclingLoader(
             file_path=file_path,
-            images_parser=RapidOCRBlobParser()
+            export_type=ExportType.DOC_CHUNKS,
+            chunker=chunker,
         )
-        docs = loader.load()
 
-        for doc in docs:
-            doc.metadata["source_file"] = pdf_name
+        chunks = loader.load()
+        logger.info(f"[DoclingLoader] -> {len(chunks)} chunks extracted from '{pdf_name}'")
 
-        all_docs.extend(docs)
-        print(f"  -> {len(docs)} pages extracted from {pdf_name}")
+        # Inject source filename for retrieval attribution
+        for chunk in chunks:
+            chunk.metadata["source_file"] = pdf_name
 
-    print(f"Total pages loaded: {len(all_docs)}")
+        all_chunks.extend(chunks)
 
-    chunks = _chunk_documents(all_docs)
-    final_chunks = _inject_metadata(chunks, {"college_slug": college_slug})
-    return final_chunks
+    logger.info(f"[DoclingLoader] Total chunks across all PDFs: {len(all_chunks)}")
+
+    # Inject college_slug for collection-level filtering
+    _inject_metadata(all_chunks, {"college_slug": college_slug})
+
+    return all_chunks

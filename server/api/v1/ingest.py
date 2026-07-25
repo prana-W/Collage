@@ -62,7 +62,9 @@ async def ingest_pdfs(
 
     # Enqueue the job in RQ — RQ stores the job in Redis automatically
     q = get_queue()
-    job = q.enqueue(run_ingestion_job, college_slug, saved_files)
+    # Docling runs layout AI models and can take several minutes for large PDFs.
+    # timeout=1800 gives up to 30 minutes before RQ kills the job.
+    job = q.enqueue(run_ingestion_job, college_slug, saved_files, job_timeout=1800)
 
     logger.info(f"Job {job.id} enqueued for college '{college_slug}' — {len(saved_files)} file(s)")
 
