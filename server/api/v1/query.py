@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from llm.rag_chain import build_rag_chain
+from llm.rag_chain import build_rag_chain, stream_rag_with_token_audit
 from api.v1.auth import get_current_user
 from db.models import User
 
@@ -53,6 +53,7 @@ async def stream_query_knowledge_base(
 ):
     """
     Streams tokens in real-time using Server-Sent Events (SSE) / text stream. Requires Bearer Token.
+    Appends token audit metrics at the end of the stream.
     """
     if not request.college_slug.strip():
         raise HTTPException(status_code=400, detail="college_slug cannot be empty.")
@@ -60,13 +61,13 @@ async def stream_query_knowledge_base(
         raise HTTPException(status_code=400, detail="question cannot be empty.")
 
     try:
-        chain = build_rag_chain(college_slug=request.college_slug.strip(), top_k=request.top_k)
-
-        def event_generator():
-            for chunk in chain.stream({"question": request.question.strip()}):
-                yield chunk
-
-        return StreamingResponse(event_generator(), media_type="text/plain")
+        generator = stream_rag_with_token_audit(
+            question=request.question.strip(),
+            college_slug=request.college_slug.strip(),
+            top_k=request.top_k,
+            user_id=current_user.id
+        )
+        return StreamingResponse(generator, media_type="text/plain")
     except Exception as e:
         logger.error(f"Error executing streaming RAG query: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to stream answer: {str(e)}")

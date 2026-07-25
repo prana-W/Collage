@@ -26,27 +26,40 @@ ENHANCER_PROMPT = ChatPromptTemplate.from_messages([
     ("human", "{query}"),
 ])
 
+from utils.token_counter import count_tokens, TokenAudit
+
 # LangChain LCEL chain for query enhancement
 query_enhancer_chain = ENHANCER_PROMPT | settings.llm_model | StrOutputParser()
 
 
-def enhance_query(query: str) -> str:
+def enhance_query(query: str, audit: TokenAudit = None) -> str:
     """
     Takes a raw user query string, corrects spelling/grammar, expands broken fragments,
     and returns the clean, enhanced query string using LangChain LCEL.
+    Also records token usage in TokenAudit if provided.
     """
     raw = query.strip()
     if not raw:
         return raw
 
+    # Audit prompt tokens
+    if audit is not None:
+        prompt_text = f"{QUERY_ENHANCER_SYSTEM_PROMPT}\n{raw}"
+        audit.enhancer_prompt_tokens = count_tokens(prompt_text)
+
     try:
         enhanced = query_enhancer_chain.invoke({"query": raw}).strip()
         # Fallback if LLM returns empty string
         if not enhanced:
-            return raw
-            
+            enhanced = raw
+
+        if audit is not None:
+            audit.enhancer_completion_tokens = count_tokens(enhanced)
+
         logger.info(f"[QueryEnhancer] Raw query: '{raw}' -> Enhanced query: '{enhanced}'")
         return enhanced
     except Exception as e:
         logger.warning(f"[QueryEnhancer] Query enhancement failed, using raw query: {e}")
+        if audit is not None:
+            audit.enhancer_completion_tokens = 0
         return raw

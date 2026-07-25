@@ -10,7 +10,8 @@ import {
   HelpCircle,
   FileText,
   Trash2,
-  ExternalLink
+  ExternalLink,
+  Zap
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -128,10 +129,23 @@ const Query = () => {
         const chunkText = decoder.decode(value, { stream: true });
         accumulatedText += chunkText;
 
+        let cleanText = accumulatedText;
+        let tokenStats = null;
+
+        if (accumulatedText.includes('__TOKEN_USAGE__:')) {
+          const parts = accumulatedText.split('__TOKEN_USAGE__:');
+          cleanText = parts[0];
+          try {
+            tokenStats = JSON.parse(parts[1].trim());
+          } catch (e) {
+            console.error('Failed to parse token usage JSON:', e);
+          }
+        }
+
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === botMsgId
-              ? { ...msg, text: accumulatedText }
+              ? { ...msg, text: cleanText, tokenStats }
               : msg
           )
         );
@@ -289,6 +303,16 @@ const Query = () => {
                         </span>
                       )}
                     </div>
+
+                    {/* Token Usage Audit Badge */}
+                    {msg.role === 'assistant' && msg.tokenStats && (
+                      <div className="mt-3 pt-2 border-t border-border/40 flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
+                        <span className="inline-flex items-center gap-1 text-primary font-semibold px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                          <Zap className="w-3 h-3 text-primary shrink-0" />
+                          {msg.tokenStats.total_tokens.toLocaleString()} tokens used
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {msg.role === 'user' && (

@@ -10,6 +10,7 @@ class College(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String(255), nullable=False)
     slug = Column(String(255), unique=True, index=True, nullable=False)
+    total_tokens_used = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     def to_dict(self):
@@ -17,6 +18,7 @@ class College(Base):
             "id": self.id,
             "name": self.name,
             "slug": self.slug,
+            "total_tokens_used": self.total_tokens_used or 0,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -30,6 +32,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default="user")  # "admin" or "user"
     college_slug = Column(String(255), nullable=False)
+    total_tokens_used = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     def to_dict(self):
@@ -39,5 +42,6 @@ class User(Base):
             "email": self.email,
             "role": self.role,
             "college_slug": self.college_slug,
+            "total_tokens_used": self.total_tokens_used or 0,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
