@@ -1,6 +1,6 @@
 from langchain_core.documents.base import Document
 from langchain_opendataloader_pdf import OpenDataLoaderPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from config.settings import settings
 import os
 
@@ -32,13 +32,33 @@ def _load_pdf(pdf_file_names: list[str]):
     return documents
 
 def _chunk_documents(docs):
-    splitter = RecursiveCharacterTextSplitter(
+    headers_to_split_on = [
+        ("#", "Header 1"),
+        ("##", "Header 2"),
+        ("###", "Header 3"),
+    ]
+    markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+    
+    char_splitter = RecursiveCharacterTextSplitter(
         chunk_size=settings.CHUNK_SIZE,
         chunk_overlap=settings.CHUNK_OVERLAP
     )
-   
-    chunks = splitter.split_documents(docs)
-    return chunks
+    
+    all_chunks = []
+    for doc in docs:
+        # Markdown splitter works on string text
+        md_docs = markdown_splitter.split_text(doc.page_content)
+        
+        # Re-inject the original document metadata (like source_file, page) 
+        # since split_text creates fresh documents
+        for md_doc in md_docs:
+            md_doc.metadata.update(doc.metadata)
+            
+        # If any markdown section is STILL larger than CHUNK_SIZE, split it by characters
+        final_docs = char_splitter.split_documents(md_docs)
+        all_chunks.extend(final_docs)
+        
+    return all_chunks
 
 def process_pdfs(pdf_file_names: list[str], college_slug: str):
     """
