@@ -7,7 +7,7 @@ def search_college_knowledge_base(query: str, college_slug: str, top_k: int = 4)
     document chunks from that specific college's vector store.
     """
     vectorstore = get_college_vectorstore(college_slug)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": top_k})
+    retriever = vectorstore.as_retriever(search_type = "mmr", search_kwargs={"k": top_k})
     
     results = retriever.invoke(query)
     

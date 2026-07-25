@@ -19,9 +19,9 @@ class Settings:
     GEMINI_EMBEDDING_MODEL: str = os.getenv("GEMINI_EMBEDDING_MODEL", "models/embedding-001")
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
 
-    # Vision Model Config
-    OLLAMA_VISION_MODEL: str = os.getenv("OLLAMA_VISION_MODEL", "llava")
-    GEMINI_VISION_MODEL: str = os.getenv("GEMINI_VISION_MODEL", "gemini-1.5-flash")
+    # Generation LLM Config
+    OLLAMA_LLM_MODEL: str = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
+    GEMINI_LLM_MODEL: str = os.getenv("GEMINI_LLM_MODEL", "gemini-1.5-flash")
     
     # Ingestion & Chunking Config
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", 1000))
@@ -54,22 +54,21 @@ class Settings:
         #     )
 
     @property
-    def vision_model(self):
+    def llm_model(self):
         """
-        Abstracts the vision LLM initialization.
-        Returns Gemini Flash in production, Ollama (llava) in development.
+        Abstracts the text generation LLM initialization.
+        Returns Gemini in production, Ollama in development.
         """
         if self.ENVIRONMENT == "production":
             from langchain_google_genai import ChatGoogleGenerativeAI
             return ChatGoogleGenerativeAI(
-                model=self.GEMINI_VISION_MODEL,
+                model=self.GEMINI_LLM_MODEL,
                 google_api_key=self.GOOGLE_API_KEY
             )
         else:
             from langchain_ollama import ChatOllama
             return ChatOllama(
-                model=self.OLLAMA_VISION_MODEL,
-                num_ctx=8192  # Increase context window to fit large base64 images
+                model=self.OLLAMA_LLM_MODEL
             )
 
 # Instantiate a global settings object to be imported across the app
