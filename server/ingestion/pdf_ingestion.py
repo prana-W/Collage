@@ -1,6 +1,8 @@
 from langchain_core.documents.base import Document
 from langchain_opendataloader_pdf import OpenDataLoaderPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from config.settings import settings
+import os
 
 __all__ = ["process_pdfs"]
 
@@ -12,11 +14,18 @@ def _inject_metadata(documents, extra_metadata):
 def _load_pdf(pdf_file_names: list[str]):
     # Create a list of full paths for the loader
     file_paths = [f"../data/{pdf}" for pdf in pdf_file_names]
+    
+    # Ensure the persistent image storage directory exists
+    os.makedirs(settings.IMAGE_OUTPUT_DIR, exist_ok=True)
+    
     loader = OpenDataLoaderPDFLoader(
         file_path=file_paths,
         format="markdown",
         split_pages= True,
-        image_output= "embedded"
+        image_output= "external",
+        image_format="jpeg",
+        image_dir=os.path.abspath(settings.IMAGE_OUTPUT_DIR),
+        quiet=True,
         
     )
     documents = loader.load()
@@ -24,8 +33,8 @@ def _load_pdf(pdf_file_names: list[str]):
 
 def _chunk_documents(docs):
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
+        chunk_size=settings.CHUNK_SIZE,
+        chunk_overlap=settings.CHUNK_OVERLAP
     )
    
     chunks = splitter.split_documents(docs)

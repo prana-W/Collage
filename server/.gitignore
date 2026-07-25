@@ -40,3 +40,6 @@ MANIFEST
 .pytest_cache/
 .coverage
 htmlcov/
+
+# User Data / Uploads
+storage/
