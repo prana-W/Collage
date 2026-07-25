@@ -1,4 +1,4 @@
-import { Home, About, NotFound, Query, Login, Register } from './pages';
+import { Home, About, NotFound, Query, Login, Register, Ingest } from './pages';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { ThemeProvider } from "@/components/theme-provider";
 import Layout from './Layout.jsx';
@@ -12,9 +12,13 @@ const router = createBrowserRouter([
         children: [
             {
                 path: '',
+                element: <Home />,
+            },
+            {
+                path: 'ingest',
                 element: (
                     <ProtectedRoute requireAdmin={true}>
-                        <Home />
+                        <Ingest />
                     </ProtectedRoute>
                 ),
             },
