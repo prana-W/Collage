@@ -1,9 +1,9 @@
-import { Home, About, NotFound, Query } from './pages';
+import { Home, About, NotFound, Query, Login, Register } from './pages';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
-import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeProvider } from "@/components/theme-provider";
 import Layout from './Layout.jsx';
-
-import {createBrowserRouter, RouterProvider} from 'react-router-dom';
+import ProtectedRoute from './components/ProtectedRoute.jsx';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 
 const router = createBrowserRouter([
     {
@@ -12,11 +12,27 @@ const router = createBrowserRouter([
         children: [
             {
                 path: '',
-                element: <Home />,
+                element: (
+                    <ProtectedRoute requireAdmin={true}>
+                        <Home />
+                    </ProtectedRoute>
+                ),
             },
             {
                 path: 'query',
-                element: <Query />,
+                element: (
+                    <ProtectedRoute>
+                        <Query />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: 'login',
+                element: <Login />,
+            },
+            {
+                path: 'register',
+                element: <Register />,
             },
             {
                 path: 'about',
@@ -33,9 +49,9 @@ const router = createBrowserRouter([
 function App() {
     return (
         <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-        <ErrorBoundary>
-            <RouterProvider router={router} />
-        </ErrorBoundary>
+            <ErrorBoundary>
+                <RouterProvider router={router} />
+            </ErrorBoundary>
         </ThemeProvider>
     );
 }

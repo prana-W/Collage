@@ -12,6 +12,9 @@ def _format_context(docs: list[Document]) -> str:
     Each chunk is prefixed with its source filename and page number so the LLM
     can reference them when citing sources in its answer.
     """
+    if not docs:
+        return "NO_RELEVANT_DOCUMENTS_FOUND: The vector search returned 0 relevant document chunks from the uploaded knowledge base."
+
     formatted_chunks = []
     for i, doc in enumerate(docs, 1):
         source = doc.metadata.get("source_file", "Unknown")

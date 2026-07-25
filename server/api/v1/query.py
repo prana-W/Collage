@@ -1,8 +1,10 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from llm.rag_chain import build_rag_chain
+from api.v1.auth import get_current_user
+from db.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +18,13 @@ class QueryRequest(BaseModel):
 
 
 @router.post("", summary="Ask a question against a college's knowledge base")
-async def query_knowledge_base(request: QueryRequest) -> JSONResponse:
+async def query_knowledge_base(
+    request: QueryRequest,
+    current_user: User = Depends(get_current_user)
+) -> JSONResponse:
     """
     Accepts a question and college_slug, runs the RAG chain, and returns
-    the generated answer with source citations.
+    the generated answer with source citations. Requires Bearer Token.
     """
     if not request.college_slug.strip():
         raise HTTPException(status_code=400, detail="college_slug cannot be empty.")
@@ -34,6 +39,7 @@ async def query_knowledge_base(request: QueryRequest) -> JSONResponse:
             "college_slug": request.college_slug,
             "question": request.question,
             "answer": answer,
+            "asked_by": current_user.email,
         })
     except Exception as e:
         logger.error(f"Error executing RAG query: {e}", exc_info=True)
@@ -41,9 +47,12 @@ async def query_knowledge_base(request: QueryRequest) -> JSONResponse:
 
 
 @router.post("/stream", summary="Ask a question with token streaming")
-async def stream_query_knowledge_base(request: QueryRequest):
+async def stream_query_knowledge_base(
+    request: QueryRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
-    Streams tokens in real-time using Server-Sent Events (SSE) / text stream.
+    Streams tokens in real-time using Server-Sent Events (SSE) / text stream. Requires Bearer Token.
     """
     if not request.college_slug.strip():
         raise HTTPException(status_code=400, detail="college_slug cannot be empty.")

@@ -16,11 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import { useAuth } from '@/context/AuthContext';
+
 const API_BASE_URL = 'http://localhost:8000/api/v1/ingest';
 const POLL_INTERVAL_MS = 5000;
 
 const Home = () => {
-  const [collegeSlug, setCollegeSlug] = useState('nitjsr');
+  const { user } = useAuth();
+  const [collegeSlug, setCollegeSlug] = useState(user?.college_slug || 'nitjsr');
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadError, setUploadError] = useState(null);

@@ -16,10 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import { useAuth } from '@/context/AuthContext';
+
 const API_QUERY_URL = 'http://localhost:8000/api/v1/query/stream';
 
 const Query = () => {
-  const [collegeSlug, setCollegeSlug] = useState('nitjsr');
+  const { user, token } = useAuth();
+  const [collegeSlug, setCollegeSlug] = useState(user?.college_slug || 'nitjsr');
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -48,9 +51,14 @@ const Query = () => {
     setIsGenerating(true);
 
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(API_QUERY_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           college_slug: collegeSlug.trim(),
           question: queryText,
