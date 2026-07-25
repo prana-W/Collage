@@ -32,21 +32,26 @@ class Settings:
     def embedding_model(self):
         """
         Abstracts the embedding model initialization.
-        Returns Gemini in production, Ollama in development.
+        Returns Ollama in both production and development.
         """
-        if self.ENVIRONMENT == "production":
-            from langchain_google_genai import GoogleGenerativeAIEmbeddings
-            print("Using Gemini Embeddings (Production Mode)")
-            return GoogleGenerativeAIEmbeddings(
-                model=self.GEMINI_EMBEDDING_MODEL,
-                google_api_key=self.GOOGLE_API_KEY
-            )
-        else:
-            from langchain_ollama import OllamaEmbeddings
-            print("Using Ollama Embeddings (Development Mode)")
-            return OllamaEmbeddings(
-                model=self.OLLAMA_EMBEDDING_MODEL
-            )
+        from langchain_ollama import OllamaEmbeddings
+        print("Using Ollama Embeddings (Development Mode)")
+        return OllamaEmbeddings(
+            model=self.OLLAMA_EMBEDDING_MODEL
+        )
+        # if self.ENVIRONMENT == "production":
+        #     from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        #     print("Using Gemini Embeddings (Production Mode)")
+        #     return GoogleGenerativeAIEmbeddings(
+        #         model=self.GEMINI_EMBEDDING_MODEL,
+        #         google_api_key=self.GOOGLE_API_KEY
+        #     )
+        # else:
+        #     from langchain_ollama import OllamaEmbeddings
+        #     print("Using Ollama Embeddings (Development Mode)")
+        #     return OllamaEmbeddings(
+        #         model=self.OLLAMA_EMBEDDING_MODEL
+        #     )
 
     @property
     def vision_model(self):

@@ -34,4 +34,6 @@ dependencies = [
     "uvicorn[standard]",
     "python-multipart",
     "langchain-opendataloader-pdf>=2.0.0",
+    "rapidocr-onnxruntime",
+    "rapidocr"
 ]
