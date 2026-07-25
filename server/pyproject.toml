@@ -35,5 +35,7 @@ dependencies = [
     "python-multipart",
     "langchain-opendataloader-pdf>=2.0.0",
     "rapidocr-onnxruntime",
-    "rapidocr"
+    "rapidocr",
+    "rq",
+    "redis",
 ]

@@ -13,6 +13,9 @@ class Settings:
     
     # Vector DB Config
     CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "my_chroma_db")
+
+    # Redis Config
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     
     # Embeddings Config
     OLLAMA_EMBEDDING_MODEL: str = os.getenv("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:0.6b")
