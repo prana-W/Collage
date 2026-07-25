@@ -1,9 +1,13 @@
+import logging
 from langchain_core.documents.base import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from config.settings import settings
 from prompts.rag_prompt import RAG_PROMPT
 from retrieval.retriever import search_college_knowledge_base
+from llm.query_enhancer import enhance_query
+
+logger = logging.getLogger(__name__)
 
 
 def _format_context(docs: list[Document]) -> str:
@@ -27,27 +31,37 @@ def _format_context(docs: list[Document]) -> str:
 
 def build_rag_chain(college_slug: str, top_k: int = 4):
     """
-    Builds and returns a stateless (memoryless) LCEL RAG chain for a specific college.
+    Builds and returns a stateless LCEL RAG chain for a specific college.
 
     Chain flow:
-        question → retriever → format context → RAG prompt → LLM → string output
+        raw_question -> query_enhancer (fixes spelling, grammar & expands fragments)
+                     -> retriever (ChromaDB vector search using enhanced query)
+                     -> format context
+                     -> RAG prompt -> LLM -> string output
     
     Input:  {"question": str}
     Output: str (the LLM's answer with citations)
     """
 
-    def retrieve_and_format(inputs: dict) -> dict:
-        """Retrieves docs and formats them, then passes everything to the prompt."""
-        question = inputs["question"]
-        docs = search_college_knowledge_base(question, college_slug, top_k=top_k)
+    def process_and_retrieve(inputs: dict) -> dict:
+        """Enhances input query, retrieves docs, and formats context."""
+        raw_question = inputs["question"]
+        
+        # Step 1: Enhance query via LLM query enhancer
+        enhanced_question = enhance_query(raw_question)
+        
+        # Step 2: Retrieve relevant chunks using enhanced question
+        docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
+        
+        # Step 3: Return formatted context and enhanced question for synthesis
         return {
             "context": _format_context(docs),
-            "question": question,
+            "question": enhanced_question,
             "college_slug": college_slug,
         }
 
     chain = (
-        RunnableLambda(retrieve_and_format)
+        RunnableLambda(process_and_retrieve)
         | RAG_PROMPT
         | settings.llm_model
         | StrOutputParser()
