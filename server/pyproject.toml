@@ -3,4 +3,35 @@ name = "server"
 version = "0.1.0"
 description = "FastAPI LangChain Server with ChromaDB"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "langchain",
+    "langchain-core",
+    "langchain-classic",
+    "langchain-community",
+    "langchain-chroma",
+    "langchain-experimental",
+    "langchain-google-genai",
+    "google-generativeai",
+    "langchain-ollama",
+    "python-dotenv",
+    "numpy",
+    "scikit-learn",
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "pydantic",
+    "email-validator",
+    "grandalf",
+    "pypdf",
+    "chromadb",
+    "tiktoken",
+    "faiss-cpu",
+    "wikipedia",
+    "duckduckgo-search",
+    "ddgs",
+    "requests",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+    "langchain-opendataloader-pdf>=2.0.0",
+]
