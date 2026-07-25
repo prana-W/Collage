@@ -1,229 +1,294 @@
-# Development Notes: Multi-Tenant University RAG System (COLLAGE)
+# Developer Reference Guide: COLLAGE (Multi-Tenant University RAG System)
 
-This document tracks the architectural decisions, features built, and system evolution of the project.
-
-## Core Architecture
-- **App Name**: COLLAGE (Wordplay on "College" — unifying scattered campus knowledge into one RAG picture).
-- **Backend Framework**: FastAPI (Python)
-- **Database**: MySQL (SQLAlchemy + PyMySQL ORM)
-- **Vector Database**: ChromaDB (Local persistent storage partitioned by `college_slug`)
-- **AI Framework**: LangChain (LCEL - LangChain Expression Language)
-- **Task Queue**: RQ (Redis Queue) backed by Redis server
-- **Frontend**: React (Vite + TailwindCSS + Lucide Icons + React Router + AuthContext)
-- **Package Manager**: `uv` (Python) / `npm` (Node.js)
+Welcome to the **COLLAGE** developer documentation. This document serves as the complete technical specification, architectural guide, and codebase map for developers onboarding to or maintaining the project.
 
 ---
 
-## Implemented Features
+## 1. Executive Summary & Tech Stack
 
-### 1. Environment-Aware Model Configuration (`settings.py`)
-- Centralized configuration system using Python `@property` decorators.
-- **Development Mode**: Uses local **Ollama** models (`qwen3-embedding` for vectors, `llama3.2` for generation) to enable 100% free, local, offline testing.
-- **Production Mode**: Swaps to **Google Gemini API** (`embedding-001` for vectors, `gemini-1.5-flash` for generation) for high-speed, scalable deployment.
-- Swaps underlying LangChain modules (`OllamaEmbeddings` vs `GoogleGenerativeAIEmbeddings`) based on `.env` without modifying core business logic.
+**COLLAGE** (a wordplay on "College") unifies scattered campus knowledge (PDF syllabi, notices, exam schedules, room allotments, and web pages) into a isolated, multi-tenant RAG (Retrieval-Augmented Generation) system.
 
-### 2. Multi-Tenant Database & Authentication Layer (`db/` & `api/v1/auth.py`)
-- **MySQL Database**: `User` and `College` tables managed via SQLAlchemy ORM and PyMySQL.
-- **Automatic Slugification**: Auto-converts institute names into URL-safe slugs (e.g., `"NIT Jamshedpur"` $\rightarrow$ `"nit-jamshedpur"`).
-- **Password Security**: `bcrypt` salted password hashing.
-- **Session Tokens**: 7-day persistent JWT access token issuance.
-- **Dependency Guard**: `get_current_user` FastAPI dependency for Bearer token validation across API endpoints.
-
-### 3. Multi-Tenant Vector Storage (`chroma_client.py`)
-- Designed to handle multiple universities/institutes securely within a single ChromaDB instance.
-- Partitioned by `college_slug` (e.g., `college_nitjsr`, `college_iitb`).
-- Prevents cross-contamination of data; when querying for `nitjsr`, the vector store physically cannot access `iitb` documents.
-
-### 4. Advanced PDF Ingestion with Docling, HybridChunker & RQ Async Queue (`pdf_ingestion.py`)
-- **Docling Integration**: Uses `DoclingLoader` for layout-aware document extraction (headings, reading order, and table structures).
-- **Semantic Hybrid Chunking**: Employs Docling's `HybridChunker` backed by the `BAAI/bge-small-en-v1.5` tokenizer (512-token context window limit) for semantically bounded, context-aware chunks without needing ad-hoc character splitters.
-- **ChromaDB Metadata Flattening (`_flatten_docling_metadata`)**: Automatically converts Docling's complex nested `dl_meta` structures into flat scalar metadata (`page_no`, `headings`, `origin_filename`, `source_file`), preventing ChromaDB vector store insertion errors.
-- **Environment & Logging Guard**: Sets `TOKENIZERS_PARALLELISM=false` and `TRANSFORMERS_VERBOSITY=error` to suppress internal HuggingFace parallelism locks and cosmetic token sequence warnings.
-- **Async Queue & Timeouts**: Enqueues PDF jobs via Redis Queue (RQ worker) with an extended 30-minute (`1800s`) `job_timeout` to handle large multi-page PDFs cleanly without worker job timeout kills. Front-end polls job status every 5 seconds.
-
-### 5. LLM Query Enhancer & Rewriter (`query_enhancer.py`)
-- Standalone LangChain LCEL pipeline (`ENHANCER_PROMPT | llm_model | StrOutputParser()`).
-- Automatically fixes spelling mistakes, corrects grammar, and expands broken fragments into full, clear questions:
-  - *Example*: `"supplentry exem datesss"` $\rightarrow$ `"What is the supplementary exam dates?"`
-  - *Example*: `"exam date"` $\rightarrow$ `"What is the exam date?"`
-- Runs seamlessly prior to vector search in `build_rag_chain()`.
-
-### 6. Hybrid Retrieval System (`retriever.py`)
-- Combines **Sparse Lexical Search** (BM25) and **Dense Semantic Search** (MMR via ChromaDB) into a hybrid pipeline using LangChain's `EnsembleRetriever`.
-- Uses **Reciprocal Rank Fusion (RRF)** to merge and re-rank document chunks.
-- **Priority Weighting**: Configured with `BM25 = 0.6` (60% weight for exact keyword matching like course codes, notice dates, and names) and `MMR = 0.4` (40% weight for dense semantic understanding and chunk diversity).
-
-### 7. Strict Guardrails & Memory-less RAG Chain (`rag_chain.py` & `rag_prompt.py`)
-- Built using LangChain Expression Language (LCEL).
-- **Strict Context Boundary**: System prompt explicitly forbids the LLM from using its internal pre-trained memory or general training data about the institute or any topic.
-- **Zero-Vector Fallback**: If vector search returns 0 relevant chunks, context is set to `NO_RELEVANT_DOCUMENTS_FOUND` and the assistant answers strictly: *"I could not find relevant information in the uploaded institute documents to answer your query."*
-- **Citations**: Returns 1-indexed source document and page number citations at the end of answers.
-- **Real-Time Streaming**: Token-by-token streaming via `StreamingResponse` for smooth real-time answers.
-
-### 8. Document Serving & Admin Document Management (`documents.py` & `Documents.jsx`)
-- **Public Document Viewer (`GET /api/v1/documents/view/{filename}`)**: Serves PDFs inline (`Content-Disposition: inline`) from `storage/uploads` so any user can click source citations in the query assistant to open the exact source PDF in a new tab.
-- **Admin Document Dashboard (`/documents`)**:
-  - Lists all uploaded PDF files matching the admin's `college_slug`.
-  - Displays file size, upload timestamp, and inline PDF view link.
-  - **Secure Deletion (`DELETE /api/v1/documents/{college_slug}/{filename}`)**: Admin-restricted endpoint that validates the admin's assigned `college_slug` before deleting the file from disk AND purging all vector chunks from ChromaDB.
-
-### 9. React Frontend with AuthContext & Role-Based Access Control
-- **`AuthContext.jsx`**: Global React Context managing user sessions, roles (`admin` vs `user`), and JWT persistence in `localStorage`.
-- **`ProtectedRoute.jsx`**: Route guard component restricting access:
-  - **`Admin` Role**: Exclusive access to PDF Ingestion (`/ingest`) and Document Management (`/documents`).
-  - **`User` / `Admin` Role**: Access to Query Assistant (`/query`) with automatic pre-filling of `college_slug`.
-- **Restructured Navigation**:
-  - `/` — COLLAGE Landing Page introducing the platform philosophy & workflow.
-  - `/ingest` — PDF Drag-and-Drop Ingestion & RQ Job Polling Tracker (Admin Only).
-  - `/documents` — Uploaded Document Management & Vector Chunk Purging (Admin Only).
-  - `/query` — Real-time RAG Query Assistant with Interactive Source PDF Citations (Authenticated Users & Admins).
-  - `/login` & `/register` — Account authentication & role creation.
-### 10. End-to-End RAG Token Usage Auditing & Analytics (`token_counter.py` & `rag_chain.py`)
-- **Multi-Stage Token Counter**: Tracks token consumption across all 4 stages of a RAG query:
-  1. **Query Enhancer**: Prompt & rewritten question token count.
-  2. **Embedding Model**: Dense vector query representation tokens.
-  3. **RAG Prompt & Context**: System prompt + formatted context payload tokens.
-  4. **LLM Output Stream**: Real-time answer generation completion tokens.
-- Uses `tiktoken` (`cl100k_base` / `o200k_base`) with character-ratio fallbacks for local and cloud models.
-- Streams a final JSON token usage audit object (`__TOKEN_USAGE__:{...}`) over the SSE text stream.
-
-### 11. Database Token Accounting & User Analytics (`db/models.py` & `db/crud.py`)
-- **Cumulative Persistence**: Added `total_tokens_used` columns to both `User` and `College` models in MySQL via SQLAlchemy ORM.
-- **Atomic Increments**: `record_token_usage()` increments user and institute token totals after each query stream completes.
-- **Account Profile Modal (`ProfileModal.jsx`)**: Rendered via `ReactDOM.createPortal` (escaping backdrop-blur stacking contexts). Displays user details, assigned institute, account creation date, and total cumulative tokens consumed with a live refresh button.
-
-### 12. Dual-Purge Vector Storage Cleanup & Custom Confirm Dialog (`documents.py` & `confirm-dialog.jsx`)
-- **Dual Cleanup**: Deleting an institute document purges the physical file from `storage/uploads` AND deletes all corresponding vector chunks from the ChromaDB collection using `source_file` metadata filtering.
-- **Shadcn Confirm Dialog**: Replaced default browser `window.confirm()` with an accessible Tailwind/Shadcn confirmation modal.
-- **Centralized Environment URLs**: Migrated hardcoded API base URLs across all frontend components (`AuthContext`, `Documents`, `Ingest`, `Query`) to consume `VITE_API_BASE_URL`.
+### Core Stack
+- **Backend**: FastAPI (Python 3.13) managed via `uv`
+- **Database**: MySQL (SQLAlchemy 2.0 ORM + PyMySQL)
+- **Vector Database**: ChromaDB (Local persistent vector store partitioned by `college_slug`)
+- **AI / RAG Framework**: LangChain (LCEL - LangChain Expression Language)
+- **Document Parsing**: Docling (`DoclingLoader` + `HybridChunker` + `BAAI/bge-small-en-v1.5` tokenizer)
+- **Web Crawling**: Crawl4AI (Playwright-based stealth crawling with HTML/Markdown parsing)
+- **Task Queue**: RQ (Redis Queue) backed by Redis Server
+- **Frontend**: React (Vite + TailwindCSS + Lucide Icons + React Router)
+- **Embeddings & LLM**: Dual-mode (Ollama for 100% offline local dev, Google Gemini for cloud production)
 
 ---
 
-## Startup Instructions
+## 2. Directory Tree & Codebase Map
 
-### 1. Redis Server
+```text
+Collage/
+├── DEV_NOTES.md                     # Comprehensive developer & architectural documentation
+├── server/                          # FastAPI Backend Root
+│   ├── app.py                       # Application entrypoint & middleware configuration
+│   ├── pyproject.toml               # Python dependencies & uv project config
+│   ├── config/
+│   │   └── settings.py              # Environment-aware settings & dual model provider loader
+│   ├── db/
+│   │   ├── database.py              # SQLAlchemy engine & session maker
+│   │   ├── models.py                # MySQL ORM models (User, College, WebLink)
+│   │   └── crud.py                  # Database CRUD helpers & token usage recording
+│   ├── api/v1/
+│   │   ├── auth.py                  # Auth endpoints (/login, /register, /me) & JWT logic
+│   │   ├── ingest.py                # PDF & Web ingestion endpoints + RQ job status polling
+│   │   ├── query.py                 # Streaming & non-streaming RAG query endpoints
+│   │   └── documents.py             # File serving & admin document deletion (with Chroma purge)
+│   ├── ingestion/
+│   │   ├── pdf_ingestion.py         # DoclingLoader + HybridChunker PDF parsing pipeline
+│   │   └── web_ingestion.py         # Crawl4AI BFS web scraper + Markdown chunking
+│   ├── vectorstore/
+│   │   └── chroma_client.py         # Per-college isolated ChromaDB vectorstore manager & purger
+│   ├── retrieval/
+│   │   └── retriever.py             # Hybrid EnsembleRetriever (BM25 60% + Chroma MMR 40%)
+│   ├── llm/
+│   │   ├── query_enhancer.py        # LLM query spelling/grammar/expansion rewriter
+│   │   └── rag_chain.py             # RAG chain, streaming token counter, and source extraction
+│   ├── prompts/
+│   │   └── rag_prompt.py            # Closed-domain system instructions & constraints
+│   ├── utils/
+│   │   └── token_counter.py         # Tiktoken token estimation & audit data structure
+│   ├── workers/
+│   │   ├── ingestion_queue.py       # Redis connection factory & RQ queue helper
+│   │   └── ingestion_worker.py      # Background worker task consuming ingestion jobs
+│   └── storage/
+│       ├── uploads/                 # Persistent storage for raw PDF files
+│       └── chroma_db/               # Persistent ChromaDB vector data files
+└── web/                             # React Vite Frontend Root
+    ├── src/
+    │   ├── main.jsx                 # React root & Router provider
+    │   ├── App.jsx                  # Main application router layout
+    │   ├── context/
+    │   │   └── AuthContext.jsx      # Global auth state, user role, & JWT persistence
+    │   ├── components/
+    │   │   ├── Navbar.jsx           # Global navigation header
+    │   │   ├── ProtectedRoute.jsx   # Role-based route guard (Admin vs User)
+    │   │   ├── ProfileModal.jsx     # User token usage & profile portal modal
+    │   │   └── confirm-dialog.jsx   # Shadcn confirmation dialog for deletions
+    │   └── pages/
+    │       ├── Home.jsx             # Public landing page
+    │       ├── Login.jsx            # Account login page
+    │       ├── Register.jsx         # User registration page
+    │       ├── Ingest.jsx           # PDF Upload & Web Crawler Admin Dashboard
+    │       ├── Documents.jsx        # Admin Document & Crawled Link Management
+    │       └── Query.jsx            # Interactive AI RAG Query interface with citations
+    └── vite.config.js               # Vite build & proxy settings
+```
+
+---
+
+## 3. Core Technical Decisions & Rationale
+
+### 1. Multi-Tenant Vector Partitioning (`chroma_client.py`)
+- **Decision**: Every college gets an isolated ChromaDB collection named `college_<slug>` (e.g. `college_nit-jamshedpur`).
+- **Rationale**: Guarantees zero data leak between institutes. Vector queries explicitly target only the requested college's collection.
+
+### 2. Layout-Aware PDF Ingestion (`pdf_ingestion.py`)
+- **Decision**: Migrated from generic `PyPDFLoader` to `DoclingLoader` + `HybridChunker` using the `BAAI/bge-small-en-v1.5` tokenizer.
+- **Rationale**: University PDFs contain complex structures (multi-column text, room allotment tables, exam schedules). Docling preserves structural context (headings, table associations) while `HybridChunker` ensures chunk boundaries respect the 512-token context window of embedding models.
+
+### 3. ChromaDB Metadata Flattening (`_flatten_docling_metadata`)
+- **Decision**: Extract scalar fields (`page_no`, `headings`, `origin_filename`) from Docling's nested `dl_meta` and discard the rest.
+- **Rationale**: ChromaDB strictly requires primitive metadata types (`str`, `int`, `float`, `bool`). Passing Docling's raw nested dictionaries crashes vector insertion (`ValueError`).
+
+### 4. Hybrid Retrieval Strategy (`retriever.py`)
+- **Decision**: Combine **BM25** (sparse lexical keyword match) and **ChromaDB MMR** (dense semantic match) via LangChain's `EnsembleRetriever` with Reciprocal Rank Fusion (RRF).
+- **Weights**: `BM25 = 0.6` (60%), `MMR = 0.4` (40%).
+- **Rationale**: University queries frequently feature exact terms (e.g. course codes like `"EE201"`, notice dates, student IDs) where pure semantic vector search fails. BM25 catches exact keyword matches while MMR ensures semantic depth and chunk diversity.
+
+### 5. Deterministic Source Extraction vs. LLM Structured Output (`rag_chain.py`)
+- **Decision**: Stream raw markdown tokens directly from the LLM, while extracting citations programmatically from ChromaDB document metadata in Python. Append a `__TOKEN_USAGE__` JSON object at the end of the stream.
+- **Rationale**: Using LangChain's `with_structured_output(PydanticModel)` forces the LLM to output full JSON, which **destroys real-time token streaming UX** on the frontend. Furthermore, extracting sources programmatically in Python eliminates LLM hallucinated citations.
+
+### 6. Dual-Mode Model Architecture (`config/settings.py`)
+- **Development (`APP_ENV=development`)**: Local **Ollama** embeddings (`qwen3-embedding` or `bge-small-en-v1.5`) + local `llama3.2` LLM. 100% free, offline execution.
+- **Production (`APP_ENV=production`)**: Google **Gemini** embeddings (`embedding-001`) + `gemini-1.5-flash` LLM for cloud performance.
+
+---
+
+## 4. End-to-End System Workflows
+
+### Workflow A: PDF Ingestion Pipeline
+```
+[Admin Uploads PDF] ──> POST /api/v1/ingest
+                             │
+                             ├── 1. Save file to storage/uploads/<college_slug>_<name>.pdf
+                             ├── 2. Enqueue job in Redis Queue (RQ) with timeout=1800s (30m)
+                             └── 3. Return job_id immediately to frontend (202 Accepted)
+                                         │
+                             [Frontend polls GET /api/v1/ingest/status/<job_id>]
+                                         │
+                             [RQ Background Worker Executes]
+                                         │
+                             ├── a. DoclingLoader parses layout, tables, headings
+                             ├── b. HybridChunker splits into ~512 token chunks
+                             ├── c. _flatten_docling_metadata extracts scalar metadata
+                             ├── d. delete_documents_by_source purges existing chunks (dedup)
+                             └── e. add_documents_to_college stores vectors in ChromaDB collection
+```
+
+### Workflow B: RAG Query & Token Stream Pipeline
+```
+[User Asks Question] ──> POST /api/v1/query/stream
+                              │
+                              ├── 1. Query Enhancer fixes typos & expands query via LLM
+                              ├── 2. EnsembleRetriever performs BM25 (60%) + MMR (40%) search
+                              ├── 3. _format_context builds numbered citation context string
+                              ├── 4. RAG_PROMPT enforces closed-domain strict guardrails
+                              ├── 5. Stream LLM tokens to client via SSE chunk by chunk
+                              ├── 6. Record total query token usage in MySQL (User & College)
+                              └── 7. Append `__TOKEN_USAGE__:{sources: [...], tokens: ...}`
+                                          │
+                              [Frontend Renders]
+                              ├── Streamed markdown answer incrementally (ReactMarkdown)
+                              └── Interactive source pill links (PDF viewer or web URLs)
+```
+
+### Workflow C: Document Deletion & Vector Purging
+```
+[Admin Clicks Delete] ──> DELETE /api/v1/documents/<college_slug>/<filename>
+                              │
+                              ├── 1. Verify admin belongs to college_slug
+                              ├── 2. Remove physical file from server/storage/uploads/
+                              └── 3. Query ChromaDB for source_file == filename & delete vectors
+```
+
+---
+
+## 5. Detailed Component Specifications
+
+### 5.1 Configuration & Settings (`server/config/settings.py`)
+Centralized Pydantic settings singleton. Manages directory paths (`STORAGE_DIR`, `UPLOAD_DIR`), chunking configurations (`CHUNK_SIZE = 512`), and returns appropriate LangChain LLM & Embedding instances based on `APP_ENV`.
+
+### 5.2 Multi-Tenant Auth & DB (`server/db/` & `server/api/v1/auth.py`)
+- **`models.py`**:
+  - `User`: `id`, `email`, `hashed_password`, `role` (`admin`/`user`), `college_slug`, `total_tokens_used`, `created_at`.
+  - `College`: `id`, `name`, `slug` (unique primary identifier), `total_tokens_used`, `created_at`.
+  - `WebLink`: `id`, `college_slug`, `url`, `max_pages`, `pages_crawled`, `chunks_stored`, `status`, `user_id`.
+- **`auth.py`**: Generates 7-day JWT tokens signed with `JWT_SECRET_KEY`. Enforces `get_current_user` and `require_admin` dependency guards.
+
+### 5.3 Vector Store Manager (`server/vectorstore/chroma_client.py`)
+Handles ChromaDB connection pooling and document insertion. Features dedicated helper functions:
+- `get_college_vectorstore(college_slug)`: Retrieves or creates `college_<slug>` collection.
+- `delete_documents_by_source(college_slug, source_file)`: Purges all chunks matching a file.
+- `delete_documents_by_root_url(college_slug, root_url)`: Purges web crawler vectors matching a root URL.
+
+### 5.4 Retrieval Engine (`server/retrieval/retriever.py`)
+Instantiates a dynamic `EnsembleRetriever`:
+- Creates `BM25Retriever` from all stored document texts in the collection.
+- Configures ChromaDB MMR retriever (`k=top_k`, `fetch_k=20`, `lambda_mult=0.7`).
+- Merges results via RRF algorithm.
+
+### 5.5 Query Enhancer (`server/llm/query_enhancer.py`)
+Uses a lightweight LLM chain to clean raw user inputs before search.
+- Fixes typos (e.g. `"syllbusb for elecvtical"` $\rightarrow$ `"What is the syllabus for electrical engineering?"`).
+- Prevents retrieval failures caused by misspelled keywords.
+
+### 5.6 RAG Chain & Audit (`server/llm/rag_chain.py` & `server/prompts/rag_prompt.py`)
+- **Prompt Constraints**: Closed-domain instructions. If context is insufficient, LLM must output: *"I could not find relevant information in the uploaded institute documents to answer your query."*
+- **Token Counter**: Uses `tiktoken` to audit token counts for Enhancer, Embedding, Prompt Context, and Completion Output, atomically persisting usage in MySQL.
+
+### 5.7 Frontend SPA (`web/src/`)
+- **`AuthContext.jsx`**: Handles authentication state, token storage, user roles, and login/logout flows.
+- **`ProtectedRoute.jsx`**: Protects `/ingest` and `/documents` for admins only.
+- **`Query.jsx`**: Chat interface supporting streaming responses, markdown rendering (`ReactMarkdown` + `remark-gfm`), token audit metrics display, and interactive source document modal views.
+- **`Ingest.jsx`**: Drag-and-drop PDF ingestion dashboard with live polling status bar and Crawl4AI website URL crawler submission tab.
+- **`Documents.jsx`**: Management console for viewing uploaded PDFs and crawled web links with inline deletion and vector purge actions.
+
+---
+
+## 6. Environment Variables Reference (`.env`)
+
+```env
+# Application Environment
+APP_ENV=development                    # development | production
+PORT=8000
+HOST=0.0.0.0
+
+# Security & JWT
+JWT_SECRET_KEY=your_super_secret_jwt_key_here
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_DAYS=7
+
+# Database (MySQL)
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=collage_db
+
+# Redis & Task Queue
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Development LLM / Embeddings (Ollama)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+OLLAMA_EMBEDDING_MODEL=bge-small-en-v1.5
+
+# Production LLM / Embeddings (Google Gemini)
+GOOGLE_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-1.5-flash
+GEMINI_EMBEDDING_MODEL=models/embedding-001
+
+# Chunker Configuration
+CHUNK_SIZE=512
+CHUNK_OVERLAP=100
+```
+
+---
+
+## 7. Development & Startup Guide
+
+### Prerequisites
+1. Python 3.13+ with `uv` installed (`pip install uv` or `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+2. Node.js 18+ & `npm`
+3. Redis Server (`sudo apt install redis-server`)
+4. MySQL Server running with `collage_db` database created
+
+### Step-by-Step Launch
+
+#### 1. Start Redis
 ```bash
 redis-server
 ```
 
-### 2. RQ Background Worker
+#### 2. Start Background Worker (Server)
 ```bash
 cd server
 uv run rq worker
 ```
 
-### 3. FastAPI Backend Server
+#### 3. Start Backend API Server
 ```bash
 cd server
 uv run uvicorn app:app --reload
 ```
 
-### 4. React Frontend
+#### 4. Start React Frontend
 ```bash
 cd web
 npm run dev
 ```
 
----
-
-### 13. Manual Web Crawling Tool (`crawl_tool.py`)
-- **Purpose**: Standalone CLI script for manual testing of college website crawling. Stores results in a `results[]` array for inspection without touching ChromaDB.
-- **Technology**: [Crawl4AI](https://github.com/unclecode/crawl4ai) 0.9.2 — Playwright-based headless browser with stealth mode to bypass anti-bot protections on JavaScript-rendered university websites.
-- **Features**:
-  - BFS (Breadth-First Search) crawling following internal links up to `max_pages` limit.
-  - Stealth mode (`enable_stealth=True`) + `magic=True` for JS-rendered React/Angular university sites.
-  - Internal link extraction via BeautifulSoup parsing of rendered HTML (handles JS-rendered anchor tags).
-  - Excludes nav, footer, scripts, styles to reduce noise.
-  - Per-page result dict: `url`, `title`, `markdown`, `links`, `success`, `error`.
-- **Usage**: `uv run python crawl_tool.py <URL> [max_pages]`
-
-### 14. Web Content Ingestion Pipeline (`ingestion/web_ingestion.py`)
-- **Purpose**: Full ingestion pipeline that crawls a college website and stores the content in ChromaDB alongside PDF chunks — searchable via the same RAG query interface.
-- **Pipeline Flow**: `URL → Crawl4AI (JS render, stealth) → BFS internal link discovery → MarkdownTextSplitter → metadata injection → ChromaDB`
-- **Chunking**: Uses `MarkdownTextSplitter` with the same `CHUNK_SIZE` / `CHUNK_OVERLAP` from `settings.py` as the PDF pipeline.
-- **Metadata Schema** (per chunk):
-  - `college_slug` — routes to the correct ChromaDB collection.
-  - `source_file` — set to the crawled URL; enables `delete_documents_by_source()` dedup on re-crawl.
-  - `source_url` — full page URL used for query citations.
-  - `source_type` — `"web"` (distinguishes web vs. PDF chunks for future filtering).
-  - `title` — page `<title>` tag content.
-- **Key Design**: Web chunks go into the same `college_{slug}` ChromaDB collection as PDFs. A single RAG query searches both sources simultaneously.
-- **Usage**: `uv run python ingestion/web_ingestion.py <URL> <college_slug> [max_pages]`
-- **Planned Enhancements**: Sitemap-first URL discovery, URL pattern filtering, concurrent crawling with `arun_many()`, PDF link harvesting, content dedup via hashing, crawl depth limiting.
-
-### 15. Web Ingestion API & Dual Storage Management (`WebLink` MySQL + ChromaDB Purge)
-- **Database Tracking (`web_links` table)**:
-  - Tracks web crawler requests submitted by admins: `id`, `college_slug`, `url` (official root link), `max_pages`, `pages_crawled`, `chunks_stored`, `status`, `user_id`, `created_at`.
-- **API Endpoints**:
-  - `POST /api/v1/ingest/web`: Receives `url`, `max_pages`, `college_slug`. Validates admin role, records entry in MySQL (`status="processing"`), and runs background Crawl4AI web ingestion.
-  - `GET /api/v1/ingest/web/links/{college_slug}`: Retrieves all web links ingested for the college.
-  - `DELETE /api/v1/ingest/web/links/{link_id}`: Deletes the link entry from MySQL AND purges all vector chunks matching `root_url` and `college_slug` from ChromaDB via `delete_documents_by_root_url()`.
-- **Frontend Integration (`Ingest.jsx` & `Documents.jsx`)**:
-  - **Ingest Page**: Added dedicated **Website Crawler (Crawl4AI)** tab for entering college URLs, configuring max pages, and submitting ingestion jobs.
-  - **Documents Page**: Added **Crawled Web Links** tab displaying URL, crawl stats, chunks stored, and a **Delete Link & Purge Embeddings** action backed by `ConfirmDialog`.
-
-### 16. Structured RAG Output & Markdown Formatting (`RAGResponse` + `ReactMarkdown`)
-- **Pydantic Model (`RAGResponse`)**:
-  - Defined in `server/llm/rag_chain.py`: `content: str` (markdown answer) and `sources: list[str]` (unique source URLs or uploaded PDF filenames).
-- **Metadata Source Extraction**:
-  - Automatically extracts `source_url` (for web crawls) or `source_file` (for PDF uploads) from ChromaDB retrieved vector chunks.
-- **Frontend Markdown & Dynamic Source Rendering (`Query.jsx`)**:
-  - Integrates `ReactMarkdown` with `remark-gfm` for full markdown rendering (`**bold**`, bulleted lists, numbered lists, section headings).
-  - Displays a dedicated **Sources Referenced** container rendering items as interactive pill links:
-    - **Web URLs**: Clicking opens the target website in a new tab (`target="_blank"`).
-    - **PDF Files**: Clicking opens the document via `/api/v1/documents/view/{filename}` in a new tab (`target="_blank"`).
-
----
-
-
-## Startup Instructions
-
-### 1. Redis Server
-```bash
-redis-server
-```
-
-### 2. RQ Background Worker
+#### 5. Manual Web Ingestion CLI (Optional Test)
 ```bash
 cd server
-uv run rq worker
-```
-
-### 3. FastAPI Backend Server
-```bash
-cd server
-uv run uvicorn app:app --reload
-```
-
-### 4. React Frontend
-```bash
-cd web
-npm run dev
-```
-
-### 5. Web Ingestion (Manual CLI)
-```bash
-cd server
-uv run python ingestion/web_ingestion.py <URL> <college_slug> [max_pages]
-# Example:
 uv run python ingestion/web_ingestion.py https://nitjsr.ac.in nit-jamshedpur 15
 ```
 
-### 6. Web Crawler Test Tool (Manual CLI)
-```bash
-cd server
-uv run python crawl_tool.py <URL> [max_pages]
-# Example:
-uv run python crawl_tool.py https://nitjsr.ac.in 10
-```
-
 ---
 
-## Future Roadmap / Pending Items
-- Add multi-turn conversational memory using `RedisChatMessageHistory` and `RunnableWithMessageHistory`.
-- Containerize FastAPI, Redis, MySQL, and RQ Worker with `docker-compose`.
-- Implement sitemap.xml-first URL discovery in `web_ingestion.py`.
-- Add URL pattern filter (`allow_patterns`) to restrict web crawling to relevant site sections.
-- Implement concurrent page crawling via Crawl4AI `arun_many()` for 3–5× speed improvement.
-- Auto-detect and harvest `.pdf` links found during web crawling → route them to `pdf_ingestion.py`.
-- Expose web ingestion as an admin API endpoint (similar to the PDF ingestion endpoint).
+## 8. Summary Checklist for New Developers
+
+- [x] **Adding a new endpoint?** Place in `server/api/v1/`, import router in `server/app.py`.
+- [x] **Modifying vector ingestion?** Ensure metadata additions in `pdf_ingestion.py` or `web_ingestion.py` pass through `_flatten_docling_metadata()` (only scalar types).
+- [x] **Updating LLM prompts?** Edit `server/prompts/rag_prompt.py`. Maintain closed-domain fallback rules.
+- [x] **Adding DB columns?** Update models in `server/db/models.py`.
+- [x] **Frontend API calls?** Always use `VITE_API_BASE_URL` from environment configuration rather than hardcoded URLs.
