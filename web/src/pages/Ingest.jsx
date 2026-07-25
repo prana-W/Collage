@@ -18,7 +18,8 @@ import { Label } from "@/components/ui/label";
 
 import { useAuth } from '@/context/AuthContext';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1/ingest';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = `${BASE_URL}/ingest`;
 const POLL_INTERVAL_MS = 5000;
 
 const Ingest = () => {

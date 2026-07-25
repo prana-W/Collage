@@ -19,7 +19,9 @@ import { Label } from "@/components/ui/label";
 
 import { useAuth } from '@/context/AuthContext';
 
-const API_VIEW_DOC_URL = 'http://localhost:8000/api/v1/documents/view';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const API_QUERY_URL = `${BASE_URL}/query/stream`;
+const API_VIEW_DOC_URL = `${BASE_URL}/documents/view`;
 
 const renderFormattedMessage = (text) => {
   if (!text) return null;
