@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.v1.ingest import router as ingest_router
 from api.v1.query import router as query_router
+from api.v1.auth import router as auth_router
+from db.database import init_db
 from workers.ingestion_queue import get_redis
 
 logging.basicConfig(
@@ -16,15 +18,17 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Verifies the Redis connection is reachable on startup.
-    The actual RQ worker runs as a separate process — start it with:
-        rq worker
+    Verifies Redis connection and initializes database tables on startup.
     """
     try:
         get_redis().ping()
         logger.info("Redis connection verified ✓")
     except Exception as e:
         logger.error(f"Could not connect to Redis: {e}. Make sure Redis is running.")
+
+    # Initialize MySQL tables
+    init_db()
+
     yield
     logger.info("FastAPI server shutting down.")
 
@@ -46,6 +50,7 @@ app.add_middleware(
 
 app.include_router(ingest_router)
 app.include_router(query_router)
+app.include_router(auth_router)
 
 
 @app.get("/health", tags=["Health"])

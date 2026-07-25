@@ -16,6 +16,22 @@ class Settings:
 
     # Redis Config
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+    # MySQL Database Config
+    MYSQL_HOST: str = os.getenv("MYSQL_HOST", "localhost")
+    MYSQL_PORT: int = int(os.getenv("MYSQL_PORT", 3306))
+    MYSQL_USER: str = os.getenv("MYSQL_USER", "root")
+    MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "")
+    MYSQL_DB: str = os.getenv("MYSQL_DB", "collage_db")
+    MYSQL_URL: str = os.getenv(
+        "MYSQL_URL", 
+        f"mysql+pymysql://{os.getenv('MYSQL_USER', 'root')}:{os.getenv('MYSQL_PASSWORD', '')}@{os.getenv('MYSQL_HOST', 'localhost')}:{os.getenv('MYSQL_PORT', 3306)}/{os.getenv('MYSQL_DB', 'collage_db')}"
+    )
+
+    # JWT Config
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "super_secret_collage_key_change_in_production_123!")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    JWT_ACCESS_TOKEN_EXPIRE_DAYS: int = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_DAYS", 7))
     
     # Embeddings Config
     OLLAMA_EMBEDDING_MODEL: str = os.getenv("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:0.6b")

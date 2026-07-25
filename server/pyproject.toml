@@ -38,4 +38,8 @@ dependencies = [
     "rapidocr",
     "rq",
     "redis",
+    "sqlalchemy",
+    "pymysql",
+    "bcrypt",
+    "pyjwt",
 ]
