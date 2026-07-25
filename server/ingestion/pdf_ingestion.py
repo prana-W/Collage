@@ -1,7 +1,7 @@
-from langchain_core.documents.base import Document
 from langchain_opendataloader_pdf import OpenDataLoaderPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from config.settings import settings
+from llm.image_describer import describe_images_in_docs
 import os
 
 __all__ = ["process_pdfs"]
@@ -50,7 +50,6 @@ def _chunk_documents(docs):
         md_docs = markdown_splitter.split_text(doc.page_content)
         
         # Re-inject the original document metadata (like source_file, page) 
-        # since split_text creates fresh documents
         for md_doc in md_docs:
             md_doc.metadata.update(doc.metadata)
             
@@ -67,10 +66,14 @@ def process_pdfs(pdf_file_names: list[str], college_slug: str):
     # 1. Load all PDFs at once using the loader's native support
     docs = _load_pdf(pdf_file_names)
     
-    # 2. Break all documents into chunks
+    # 2. Describe all images found in the documents and inject descriptions inline
+    print(f"Describing images in {len(docs)} pages...")
+    docs = describe_images_in_docs(docs)
+    
+    # 3. Break all documents into chunks
     chunks = _chunk_documents(docs)
     
-    # 3. Inject the common college_slug metadata into all chunks.
+    # 4. Inject the common college_slug metadata into all chunks.
     final_chunks = _inject_metadata(chunks, {"college_slug": college_slug})
         
     return final_chunks
