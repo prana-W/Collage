@@ -159,6 +159,11 @@ const Query = () => {
     const queryText = (overrideText ?? question).trim();
     if (!queryText || isGenerating) return;
 
+    // Capture existing chat history prior to adding the new query
+    const chatHistoryPayload = messages
+      .filter(m => m.text && !m.isStreaming && !m.isError && !m.isCancelled)
+      .map(m => ({ role: m.role, content: m.text }));
+
     const userMsgId = Date.now();
     const botMsgId = userMsgId + 1;
     setMessages(prev => [
@@ -186,7 +191,12 @@ const Query = () => {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ college_slug: collegeSlug.trim(), question: queryText, top_k: 4 }),
+        body: JSON.stringify({
+          college_slug: collegeSlug.trim(),
+          question: queryText,
+          top_k: 4,
+          chat_history: chatHistoryPayload,
+        }),
         signal: controller.signal,
       });
 

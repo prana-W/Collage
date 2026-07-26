@@ -11,10 +11,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/query", tags=["Query"])
 
 
+class ChatMessage(BaseModel):
+    role: str = Field(..., description="'user' / 'human' or 'assistant' / 'ai'")
+    content: str = Field(..., description="Message text content")
+
+
 class QueryRequest(BaseModel):
     college_slug: str = Field(..., description="Unique slug for the target college/institute", example="nitjsr")
     question: str = Field(..., description="User query / question", example="What are the passing criteria for DBMS?")
     top_k: int = Field(default=4, description="Number of vector chunks to retrieve", ge=1, le=10)
+    chat_history: list[ChatMessage] = Field(default_factory=list, description="Prior conversation history in the current session")
 
 
 @router.post("", summary="Ask a question against a college's knowledge base")
@@ -35,7 +41,8 @@ async def query_knowledge_base(
         rag_response: RAGResponse = query_rag_structured(
             question=request.question.strip(),
             college_slug=request.college_slug.strip(),
-            top_k=request.top_k
+            top_k=request.top_k,
+            chat_history=[msg.model_dump() for msg in request.chat_history]
         )
 
         return JSONResponse(content={
@@ -122,9 +129,11 @@ async def stream_query_knowledge_base(
             question=request.question.strip(),
             college_slug=request.college_slug.strip(),
             top_k=request.top_k,
-            user_id=current_user.id
+            user_id=current_user.id,
+            chat_history=[msg.model_dump() for msg in request.chat_history]
         )
         return StreamingResponse(generator, media_type="text/plain")
     except Exception as e:
         logger.error(f"Error executing streaming RAG query: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to stream answer: {str(e)}")
+

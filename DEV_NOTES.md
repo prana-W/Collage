@@ -38,7 +38,7 @@ Collage/
 │   ├── api/v1/
 │   │   ├── auth.py                  # Auth endpoints (/login, /register, /me) & JWT logic
 │   │   ├── ingest.py                # PDF & Web ingestion endpoints + RQ job status polling
-│   │   ├── query.py                 # Streaming & non-streaming RAG query endpoints
+│   │   ├── query.py                 # Streaming & non-streaming RAG query endpoints (supports chat_history)
 │   │   └── documents.py             # File serving & admin document deletion (with Chroma purge)
 │   ├── ingestion/
 │   │   ├── pdf_ingestion.py         # DoclingLoader + HybridChunker PDF parsing pipeline
@@ -48,7 +48,7 @@ Collage/
 │   ├── retrieval/
 │   │   └── retriever.py             # Hybrid EnsembleRetriever (BM25 60% + Chroma MMR 40%)
 │   ├── llm/
-│   │   ├── query_enhancer.py        # LLM query spelling/grammar/expansion rewriter
+│   │   ├── query_enhancer.py        # Context-aware LLM query rewriter using conversation history
 │   │   └── rag_chain.py             # RAG chain, streaming token counter, and source extraction
 │   ├── prompts/
 │   │   └── rag_prompt.py            # Closed-domain system instructions & constraints
@@ -77,7 +77,7 @@ Collage/
     │       ├── Register.jsx         # User registration page
     │       ├── Ingest.jsx           # PDF Upload & Web Crawler Admin Dashboard
     │       ├── Documents.jsx        # Admin Document & Crawled Link Management
-    │       └── Query.jsx            # Interactive AI RAG Query interface with citations
+    │       └── Query.jsx            # Interactive AI RAG Query interface with chat memory & citations
     └── vite.config.js               # Vite build & proxy settings
 ```
 
@@ -110,6 +110,10 @@ Collage/
 - **Development (`APP_ENV=development`)**: Local **Ollama** embeddings (`qwen3-embedding` or `bge-small-en-v1.5`) + local `llama3.2` LLM. 100% free, offline execution.
 - **Production (`APP_ENV=production`)**: Google **Gemini** embeddings (`embedding-001`) + `gemini-1.5-flash` LLM for cloud performance.
 
+### 7. Session Chat Memory & Contextual Query Enhancement (`query_enhancer.py` & `Query.jsx`)
+- **Decision**: Store chat message history locally in React frontend state (`messages`) for the duration of the user's session (cleared on page refresh) and pass `chat_history: list[ChatMessage]` in `POST /api/v1/query/stream`. In `query_enhancer.py`, use `MessagesPlaceholder` to inject prior `HumanMessage` / `AIMessage` items into the LLM prompt.
+- **Rationale**: Enables multi-turn contextual conversations (e.g., resolving `"What is its syllabus?"` into `"What is the syllabus for Electrical Engineering?"`) without cluttering vector retrieval with multi-turn prompt noise. Vector store search executes cleanly against the single standalone enhanced query.
+
 ---
 
 ## 4. End-to-End System Workflows
@@ -135,19 +139,20 @@ Collage/
 
 ### Workflow B: RAG Query & Token Stream Pipeline
 ```
-[User Asks Question] ──> POST /api/v1/query/stream
+[User Asks Question] ──> POST /api/v1/query/stream { question, college_slug, chat_history }
                               │
-                              ├── 1. Query Enhancer fixes typos & expands query via LLM
-                              ├── 2. EnsembleRetriever performs BM25 (60%) + MMR (40%) search
+                              ├── 1. Query Enhancer evaluates chat_history + question via LLM
+                              │      (resolves pronouns & context into a single standalone prompt)
+                              ├── 2. EnsembleRetriever performs BM25 (60%) + MMR (40%) search on standalone query
                               ├── 3. _format_context builds numbered citation context string
                               ├── 4. RAG_PROMPT enforces closed-domain strict guardrails
                               ├── 5. Stream LLM tokens to client via SSE chunk by chunk
                               ├── 6. Record total query token usage in MySQL (User & College)
                               └── 7. Append `__TOKEN_USAGE__:{sources: [...], tokens: ...}`
                                           │
-                              [Frontend Renders]
-                              ├── Streamed markdown answer incrementally (ReactMarkdown)
-                              └── Interactive source pill links (PDF viewer or web URLs)
+                               [Frontend Renders]
+                               ├── Streamed markdown answer incrementally (ReactMarkdown)
+                               └── Interactive source pill links (PDF viewer or web URLs)
 ```
 
 ### Workflow C: Document Deletion & Vector Purging
@@ -186,9 +191,10 @@ Instantiates a dynamic `EnsembleRetriever`:
 - Merges results via RRF algorithm.
 
 ### 5.5 Query Enhancer (`server/llm/query_enhancer.py`)
-Uses a lightweight LLM chain to clean raw user inputs before search.
+Uses a lightweight LLM chain with `MessagesPlaceholder` to clean raw user inputs and resolve conversation history before vector search.
 - Fixes typos (e.g. `"syllbusb for elecvtical"` $\rightarrow$ `"What is the syllabus for electrical engineering?"`).
-- Prevents retrieval failures caused by misspelled keywords.
+- Resolves contextual pronouns in follow-up queries using session history (e.g. History: *User asks about EE*; Follow-up: *"What is its syllabus?"* $\rightarrow$ *"What is the syllabus for Electrical Engineering?"*).
+- Prevents retrieval failures caused by misspelled keywords or ambiguous follow-up phrasing.
 
 ### 5.6 RAG Chain & Audit (`server/llm/rag_chain.py` & `server/prompts/rag_prompt.py`)
 - **Prompt Constraints**: Closed-domain instructions. If context is insufficient, LLM must output: *"I could not find relevant information in the uploaded institute documents to answer your query."*
@@ -197,7 +203,7 @@ Uses a lightweight LLM chain to clean raw user inputs before search.
 ### 5.7 Frontend SPA (`web/src/`)
 - **`AuthContext.jsx`**: Handles authentication state, token storage, user roles, and login/logout flows.
 - **`ProtectedRoute.jsx`**: Protects `/ingest` and `/documents` for admins only.
-- **`Query.jsx`**: Chat interface supporting streaming responses, markdown rendering (`ReactMarkdown` + `remark-gfm`), token audit metrics display, and interactive source document modal views.
+- **`Query.jsx`**: Chat interface supporting session memory, streaming responses, markdown rendering (`ReactMarkdown` + `remark-gfm`), token audit metrics display, and interactive source document modal views.
 - **`Ingest.jsx`**: Drag-and-drop PDF ingestion dashboard with live polling status bar and Crawl4AI website URL crawler submission tab.
 - **`Documents.jsx`**: Management console for viewing uploaded PDFs and crawled web links with inline deletion and vector purge actions.
 

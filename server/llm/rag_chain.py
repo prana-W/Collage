@@ -57,12 +57,12 @@ def _format_context(docs: list[Document]) -> str:
     return "\n\n---\n\n".join(formatted_chunks)
 
 
-def query_rag_structured(question: str, college_slug: str, top_k: int = 4) -> RAGResponse:
+def query_rag_structured(question: str, college_slug: str, top_k: int = 4, chat_history: list = None) -> RAGResponse:
     """
     Executes RAG pipeline and returns a structured RAGResponse object containing
     content and sources list.
     """
-    enhanced_question = enhance_query(question)
+    enhanced_question = enhance_query(question, chat_history=chat_history)
     docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
     sources = extract_sources_from_docs(docs)
     formatted_context = _format_context(docs)
@@ -86,7 +86,8 @@ def build_rag_chain(college_slug: str, top_k: int = 4):
 
     def process_and_retrieve(inputs: dict) -> dict:
         raw_question = inputs["question"]
-        enhanced_question = enhance_query(raw_question)
+        chat_history = inputs.get("chat_history")
+        enhanced_question = enhance_query(raw_question, chat_history=chat_history)
         docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
         
         return {
@@ -106,7 +107,13 @@ def build_rag_chain(college_slug: str, top_k: int = 4):
     return chain
 
 
-def stream_rag_with_token_audit(question: str, college_slug: str, top_k: int = 4, user_id: int = None):
+def stream_rag_with_token_audit(
+    question: str, 
+    college_slug: str, 
+    top_k: int = 4, 
+    user_id: int = None,
+    chat_history: list = None
+):
     """
     Generator that streams LLM tokens in real-time, records token metrics across
     all 4 stages, and appends a JSON audit payload containing sources & token metrics at the end.
@@ -114,7 +121,7 @@ def stream_rag_with_token_audit(question: str, college_slug: str, top_k: int = 4
     audit = TokenAudit()
 
     # Stage 1: Query Enhancement
-    enhanced_question = enhance_query(question, audit=audit)
+    enhanced_question = enhance_query(question, chat_history=chat_history, audit=audit)
 
     # Stage 2: Embedding Search
     docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
@@ -162,7 +169,7 @@ def stream_rag_with_token_audit(question: str, college_slug: str, top_k: int = 4
     yield f"\n\n__TOKEN_USAGE__:{json.dumps(audit_dict)}"
 
 
-def ask(question: str, college_slug: str, top_k: int = 4) -> str:
+def ask(question: str, college_slug: str, top_k: int = 4, chat_history: list = None) -> str:
     """
     Convenience function: builds the chain and answers a single question.
     """
@@ -170,9 +177,10 @@ def ask(question: str, college_slug: str, top_k: int = 4) -> str:
 
     print("\n[RAG] Generating answer...\n")
     full_answer = ""
-    for chunk in chain.stream({"question": question}):
+    for chunk in chain.stream({"question": question, "chat_history": chat_history}):
         print(chunk, end="", flush=True)
         full_answer += chunk
 
     print("\n")
     return full_answer
+
