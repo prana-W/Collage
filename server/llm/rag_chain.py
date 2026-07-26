@@ -31,11 +31,15 @@ def extract_sources_from_docs(docs: list[Document]) -> list[str]:
     Extracts unique source URLs or PDF filenames from retrieved document metadata.
     """
     sources = []
+    seen = set()
     for doc in docs:
-        src = doc.metadata.get("source_url") or doc.metadata.get("source_file") or doc.metadata.get("source")
-        if src and src not in sources and src != "Unknown":
+        raw_src = doc.metadata.get("source_url") or doc.metadata.get("source_file") or doc.metadata.get("source") or ""
+        src = raw_src.strip() if isinstance(raw_src, str) else str(raw_src).strip()
+        if src and src != "Unknown" and src.lower() not in seen:
+            seen.add(src.lower())
             sources.append(src)
     return sources
+
 
 
 def _format_context(docs: list[Document]) -> str:

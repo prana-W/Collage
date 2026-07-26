@@ -75,13 +75,28 @@ const Markdown = ({ content }) => {
 /* ─── Source pills ───────────────────────────────────────────── */
 const Sources = ({ sources }) => {
   if (!sources?.length) return null;
+
+  // Filter and extract strictly unique sources
+  const seen = new Set();
+  const uniqueSources = [];
+  for (const item of sources) {
+    if (!item) continue;
+    const str = typeof item === 'string' ? item.trim() : String(item).trim();
+    if (str && !seen.has(str.toLowerCase())) {
+      seen.add(str.toLowerCase());
+      uniqueSources.push(str);
+    }
+  }
+
+  if (!uniqueSources.length) return null;
+
   return (
     <div className="mt-4 pt-3 border-t border-border/40">
       <p className="text-[11px] font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
         <BookOpen className="w-3.5 h-3.5" /> Sources
       </p>
       <div className="flex flex-wrap gap-1.5">
-        {sources.map((src, i) => {
+        {uniqueSources.map((src, i) => {
           const isWeb = src.startsWith('http://') || src.startsWith('https://');
           const isPdf = src.toLowerCase().includes('.pdf');
           const href = isWeb ? src : `${API_VIEW_DOC_URL}/${encodeURIComponent(src)}`;
@@ -102,6 +117,7 @@ const Sources = ({ sources }) => {
     </div>
   );
 };
+
 
 const SAMPLES = [
   { label: 'How do I reach the campus?', icon: '🗺️' },
@@ -279,8 +295,7 @@ const Query = () => {
       {/* ── Slim top bar ─────────────────────────────────── */}
       <div className="shrink-0 flex items-center justify-between px-4 md:px-6 py-2 border-b border-border/40 bg-background">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <GraduationCap className="w-4 h-4 text-primary" />
-          <span>COLLAGE Assistant</span>
+  
         </div>
         <div className="flex items-center gap-2">
           {/* Editable institute slug pill */}
