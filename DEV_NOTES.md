@@ -102,9 +102,9 @@ Collage/
 - **Weights**: `BM25 = 0.6` (60%), `MMR = 0.4` (40%).
 - **Rationale**: University queries frequently feature exact terms (e.g. course codes like `"EE201"`, notice dates, student IDs) where pure semantic vector search fails. BM25 catches exact keyword matches while MMR ensures semantic depth and chunk diversity.
 
-### 5. Deterministic Source Extraction vs. LLM Structured Output (`rag_chain.py`)
-- **Decision**: Stream raw markdown tokens directly from the LLM, while extracting citations programmatically from ChromaDB document metadata in Python. Append a `__TOKEN_USAGE__` JSON object at the end of the stream.
-- **Rationale**: Using LangChain's `with_structured_output(PydanticModel)` forces the LLM to output full JSON, which **destroys real-time token streaming UX** on the frontend. Furthermore, extracting sources programmatically in Python eliminates LLM hallucinated citations.
+### 5. Citation-Based Source Filtering & Extraction (`rag_chain.py`)
+- **Decision**: Instruct the LLM to output inline chunk citations (`[1]`, `[2]`) in its markdown response. After streaming, programmatically parse the cited chunk numbers from the LLM output using `extract_used_sources(docs, llm_output)` to return ONLY the sources for chunks that were actually cited by the LLM. Append `__TOKEN_USAGE__:{sources: [...], tokens: ...}` at the end of the stream.
+- **Rationale**: Prevents uncited vector chunks (retrieved during vector search but unused by the LLM) from appearing in the user's sources list. If no information is found or a chunk isn't used in the answer, its source is automatically excluded.
 
 ### 6. Dual-Mode Model Architecture (`config/settings.py`)
 - **Development (`APP_ENV=development`)**: Local **Ollama** embeddings (`qwen3-embedding` or `bge-small-en-v1.5`) + local `llama3.2` LLM. 100% free, offline execution.
@@ -197,13 +197,14 @@ Uses a lightweight LLM chain with `MessagesPlaceholder` to clean raw user inputs
 - Prevents retrieval failures caused by misspelled keywords or ambiguous follow-up phrasing.
 
 ### 5.6 RAG Chain & Audit (`server/llm/rag_chain.py` & `server/prompts/rag_prompt.py`)
-- **Prompt Constraints**: Closed-domain instructions. If context is insufficient, LLM must output: *"I could not find relevant information in the uploaded institute documents to answer your query."*
+- **Prompt Constraints & Citations**: Closed-domain instructions. Instructs the LLM to output inline bracket citations (`[1]`, `[2]`) corresponding to context chunks used. If context is insufficient, LLM outputs: *"I could not find relevant information in the uploaded institute documents to answer your query."*
+- **Citation-Based Source Filtering (`extract_used_sources`)**: Programmatically parses inline chunk citations (`[1]`, `[2]`) from the streamed LLM response to map back to retrieved chunks. Vector store chunks not cited by the LLM are stripped from the sources list. Deduplicates sources case-insensitively.
 - **Token Counter**: Uses `tiktoken` to audit token counts for Enhancer, Embedding, Prompt Context, and Completion Output, atomically persisting usage in MySQL.
 
 ### 5.7 Frontend SPA (`web/src/`)
 - **`AuthContext.jsx`**: Handles authentication state, token storage, user roles, and login/logout flows.
 - **`ProtectedRoute.jsx`**: Protects `/ingest` and `/documents` for admins only.
-- **`Query.jsx`**: Chat interface supporting session memory, streaming responses, markdown rendering (`ReactMarkdown` + `remark-gfm`), token audit metrics display, and interactive source document modal views.
+- **`Query.jsx`**: Chat interface supporting session-based local memory (cleared on refresh), streaming responses, markdown rendering (`ReactMarkdown` + `remark-gfm`), token audit metrics display, client-side source deduplication, and interactive source document modal views.
 - **`Ingest.jsx`**: Drag-and-drop PDF ingestion dashboard with live polling status bar and Crawl4AI website URL crawler submission tab.
 - **`Documents.jsx`**: Management console for viewing uploaded PDFs and crawled web links with inline deletion and vector purge actions.
 
@@ -295,6 +296,9 @@ uv run python ingestion/web_ingestion.py https://nitjsr.ac.in nit-jamshedpur 15
 
 - [x] **Adding a new endpoint?** Place in `server/api/v1/`, import router in `server/app.py`.
 - [x] **Modifying vector ingestion?** Ensure metadata additions in `pdf_ingestion.py` or `web_ingestion.py` pass through `_flatten_docling_metadata()` (only scalar types).
-- [x] **Updating LLM prompts?** Edit `server/prompts/rag_prompt.py`. Maintain closed-domain fallback rules.
+- [x] **Updating LLM prompts?** Edit `server/prompts/rag_prompt.py`. Maintain closed-domain fallback rules and inline citation (`[1]`, `[2]`) instructions.
+- [x] **Session memory or follow-up query rewriting?** Pass `chat_history` payload to `enhance_query` using `MessagesPlaceholder`.
+- [x] **Extracting sources from LLM responses?** Always use `extract_used_sources(docs, llm_output)` to filter out uncited vector chunks and deduplicate sources.
 - [x] **Adding DB columns?** Update models in `server/db/models.py`.
 - [x] **Frontend API calls?** Always use `VITE_API_BASE_URL` from environment configuration rather than hardcoded URLs.
+

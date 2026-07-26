@@ -26,20 +26,76 @@ class RAGResponse(BaseModel):
     )
 
 
-def extract_sources_from_docs(docs: list[Document]) -> list[str]:
+import re
+
+def extract_used_sources(docs: list[Document], llm_output: str = None) -> list[str]:
     """
-    Extracts unique source URLs or PDF filenames from retrieved document metadata.
+    Extracts unique source URLs or PDF filenames from retrieved documents.
+    If llm_output is provided, filters sources to only include those for chunks [i]
+    that were actually cited (e.g. [1], [2]) or referenced in the LLM output.
     """
-    sources = []
-    seen = set()
-    for doc in docs:
+    if not docs:
+        return []
+
+    # Map chunk index (1-based) to source name
+    chunk_source_map = {}
+    for i, doc in enumerate(docs, 1):
         raw_src = doc.metadata.get("source_url") or doc.metadata.get("source_file") or doc.metadata.get("source") or ""
         src = raw_src.strip() if isinstance(raw_src, str) else str(raw_src).strip()
-        if src and src != "Unknown" and src.lower() not in seen:
-            seen.add(src.lower())
-            sources.append(src)
-    return sources
+        if src and src != "Unknown":
+            chunk_source_map[i] = src
 
+    if not llm_output:
+        sources = []
+        seen = set()
+        for src in chunk_source_map.values():
+            if src.lower() not in seen:
+                seen.add(src.lower())
+                sources.append(src)
+        return sources
+
+    # Parse cited chunk indices like [1], [2] from llm_output
+    cited_indices = set()
+    matches = re.findall(r'\[(\d+)\]', llm_output)
+    for m in matches:
+        try:
+            idx = int(m)
+            if idx in chunk_source_map:
+                cited_indices.add(idx)
+        except ValueError:
+            pass
+
+    used_sources = []
+    seen = set()
+
+    if cited_indices:
+        for idx in sorted(cited_indices):
+            src = chunk_source_map[idx]
+            if src.lower() not in seen:
+                seen.add(src.lower())
+                used_sources.append(src)
+    else:
+        # Fallback 1: check if source filename/URL is explicitly mentioned in text
+        for src in chunk_source_map.values():
+            src_filename = src.split("/")[-1]
+            if (src.lower() in llm_output.lower() or src_filename.lower() in llm_output.lower()) and src.lower() not in seen:
+                seen.add(src.lower())
+                used_sources.append(src)
+
+        # Fallback 2: if LLM didn't use inline [n] numbers or filenames, but gave an answer (not a "not found" fallback),
+        # return unique sources from docs
+        if not used_sources and "could not find relevant information" not in llm_output.lower():
+            for src in chunk_source_map.values():
+                if src.lower() not in seen:
+                    seen.add(src.lower())
+                    used_sources.append(src)
+
+    return used_sources
+
+
+def extract_sources_from_docs(docs: list[Document]) -> list[str]:
+    """Backward compatibility alias."""
+    return extract_used_sources(docs)
 
 
 def _format_context(docs: list[Document]) -> str:
@@ -68,7 +124,6 @@ def query_rag_structured(question: str, college_slug: str, top_k: int = 4, chat_
     """
     enhanced_question = enhance_query(question, chat_history=chat_history)
     docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
-    sources = extract_sources_from_docs(docs)
     formatted_context = _format_context(docs)
 
     prompt_messages = RAG_PROMPT.format_messages(
@@ -79,6 +134,7 @@ def query_rag_structured(question: str, college_slug: str, top_k: int = 4, chat_
 
     response = settings.llm_model.invoke(prompt_messages)
     content_str = response.content if hasattr(response, "content") else str(response)
+    sources = extract_used_sources(docs, llm_output=content_str)
 
     return RAGResponse(content=content_str, sources=sources)
 
@@ -98,7 +154,7 @@ def build_rag_chain(college_slug: str, top_k: int = 4):
             "context": _format_context(docs),
             "question": enhanced_question,
             "college_slug": college_slug,
-            "sources": extract_sources_from_docs(docs)
+            "sources": extract_used_sources(docs)
         }
 
     chain = (
@@ -130,7 +186,6 @@ def stream_rag_with_token_audit(
     # Stage 2: Embedding Search
     docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
     audit.embedding_tokens = count_tokens(enhanced_question)
-    sources = extract_sources_from_docs(docs)
 
     # Stage 3: Context Formatting & RAG Prompt Token Count
     formatted_context = _format_context(docs)
@@ -144,10 +199,15 @@ def stream_rag_with_token_audit(
         question=enhanced_question
     )
 
+    full_completion_text = ""
     for chunk in settings.llm_model.stream(prompt_messages):
         token_str = chunk.content if hasattr(chunk, "content") else str(chunk)
+        full_completion_text += token_str
         audit.rag_completion_tokens += count_tokens(token_str)
         yield token_str
+
+    # Extract ONLY sources actually cited in full_completion_text
+    sources = extract_used_sources(docs, llm_output=full_completion_text)
 
     # Persist token count in Database
     new_user_total = 0

@@ -12,6 +12,7 @@ CRITICAL INSTRUCTIONS & CONSTRAINTS:
    - Use double asterisks for **bold text** on important entities, routes, costs, and terms.
    - Use numbered lists (`1.`, `2.`) or bullet points (`-`) for step-by-step instructions or recommendations.
    - Use headings (`###`) to separate sections if the answer has multiple parts.
+5. **INLINE CITATIONS**: Whenever you cite or state facts from a specific context chunk, include inline citations using its chunk index in square brackets, e.g. [1] or [2]. Only cite chunks that you actually used to formulate your response.
 
 ---
 
