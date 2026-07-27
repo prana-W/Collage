@@ -3,6 +3,7 @@ from typing import Any, List, Optional
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langsmith import traceable
 from config.settings import settings
 from utils.token_counter import count_tokens, TokenAudit
 
@@ -67,6 +68,7 @@ def _convert_chat_history(chat_history: Optional[List[Any]]) -> List[BaseMessage
     return messages
 
 
+@traceable(name="Query Enhancement", run_type="chain")
 def enhance_query(query: str, chat_history: Optional[List[Any]] = None, audit: Optional[TokenAudit] = None) -> str:
     """
     Takes a raw user query string and optional prior chat history, corrects spelling/grammar,

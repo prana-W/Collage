@@ -2,11 +2,13 @@ import logging
 from langchain_core.documents.base import Document
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
+from langsmith import traceable
 from vectorstore.chroma_client import get_college_vectorstore
 
 logger = logging.getLogger(__name__)
 
 
+@traceable(name="Hybrid Document Retrieval", run_type="retriever")
 def search_college_knowledge_base(query: str, college_slug: str, top_k: int = 4) -> list[Document]:
     """
     Hybrid retrieval using an EnsembleRetriever that combines:

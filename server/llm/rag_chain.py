@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from langchain_core.documents.base import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langsmith import traceable
 from config.settings import settings
 from prompts.rag_prompt import RAG_PROMPT, RAG_SYSTEM_PROMPT
 from retrieval.retriever import search_college_knowledge_base
@@ -117,6 +118,7 @@ def _format_context(docs: list[Document]) -> str:
     return "\n\n---\n\n".join(formatted_chunks)
 
 
+@traceable(name="Structured RAG Query", run_type="chain")
 def query_rag_structured(question: str, college_slug: str, top_k: int = 4, chat_history: list = None) -> RAGResponse:
     """
     Executes RAG pipeline and returns a structured RAGResponse object containing
@@ -139,6 +141,7 @@ def query_rag_structured(question: str, college_slug: str, top_k: int = 4, chat_
     return RAGResponse(content=content_str, sources=sources)
 
 
+@traceable(name="Build RAG Chain", run_type="chain")
 def build_rag_chain(college_slug: str, top_k: int = 4):
     """
     Builds and returns a stateless LCEL RAG chain for a specific college.
@@ -167,6 +170,7 @@ def build_rag_chain(college_slug: str, top_k: int = 4):
     return chain
 
 
+@traceable(name="Streaming RAG Query", run_type="chain")
 def stream_rag_with_token_audit(
     question: str, 
     college_slug: str, 

@@ -6,6 +6,7 @@ from api.v1.ingest import router as ingest_router
 from api.v1.query import router as query_router
 from api.v1.auth import router as auth_router
 from api.v1.documents import router as documents_router
+from api.v1.chats import router as chats_router
 from db.database import init_db
 from workers.ingestion_queue import get_redis
 
@@ -53,6 +54,7 @@ app.include_router(ingest_router)
 app.include_router(query_router)
 app.include_router(auth_router)
 app.include_router(documents_router)
+app.include_router(chats_router)
 
 
 @app.get("/health", tags=["Health"])

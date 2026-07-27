@@ -56,6 +56,12 @@ class Settings:
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", 512))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", 100))
 
+    # LangSmith Tracing & Debugging Config
+    LANGCHAIN_TRACING_V2: str = os.getenv("LANGCHAIN_TRACING_V2", "false")
+    LANGCHAIN_API_KEY: str = os.getenv("LANGCHAIN_API_KEY", "")
+    LANGCHAIN_PROJECT: str = os.getenv("LANGCHAIN_PROJECT", "collage-rag")
+    LANGCHAIN_ENDPOINT: str = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+
     @property
     def embedding_model(self):
         """
@@ -101,3 +107,14 @@ class Settings:
 
 # Instantiate a global settings object to be imported across the app
 settings = Settings()
+
+# Synchronize LangSmith tracing variables into os.environ for automatic LangChain/LangSmith SDK pickup
+if settings.LANGCHAIN_TRACING_V2:
+    os.environ["LANGCHAIN_TRACING_V2"] = settings.LANGCHAIN_TRACING_V2
+if settings.LANGCHAIN_API_KEY:
+    os.environ["LANGCHAIN_API_KEY"] = settings.LANGCHAIN_API_KEY
+if settings.LANGCHAIN_PROJECT:
+    os.environ["LANGCHAIN_PROJECT"] = settings.LANGCHAIN_PROJECT
+if settings.LANGCHAIN_ENDPOINT:
+    os.environ["LANGCHAIN_ENDPOINT"] = settings.LANGCHAIN_ENDPOINT
+

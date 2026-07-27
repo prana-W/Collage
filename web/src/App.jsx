@@ -39,6 +39,14 @@ const router = createBrowserRouter([
                 ),
             },
             {
+                path: 'query/:chatId',
+                element: (
+                    <ProtectedRoute>
+                        <Query />
+                    </ProtectedRoute>
+                ),
+            },
+            {
                 path: 'login',
                 element: <Login />,
             },

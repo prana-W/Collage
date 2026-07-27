@@ -1,7 +1,9 @@
+import json
+import datetime
 import logging
 from sqlalchemy.orm import Session
 from db.database import SessionLocal
-from db.models import User, College, WebLink
+from db.models import User, College, WebLink, ChatSession, ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -99,5 +101,87 @@ def delete_web_link_by_id(db: Session, link_id: int) -> bool:
         db.commit()
         return True
     return False
+
+
+# --- Chat Session & Messages CRUD ---
+
+def create_chat_session(
+    db: Session,
+    user_id: int,
+    college_slug: str,
+    title: str = None,
+    session_id: str = None
+) -> ChatSession:
+    """Creates a new chat session for a user."""
+    if not title:
+        title = datetime.datetime.now().strftime("%b %d, %Y, %I:%M %p")
+
+    kwargs = {
+        "user_id": user_id,
+        "college_slug": college_slug,
+        "title": title,
+    }
+    if session_id:
+        kwargs["id"] = session_id
+
+    session = ChatSession(**kwargs)
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def get_user_chat_sessions(db: Session, user_id: int) -> list[ChatSession]:
+    """Retrieves all chat sessions for a specific user ordered by last updated time."""
+    return db.query(ChatSession).filter(ChatSession.user_id == user_id).order_by(ChatSession.updated_at.desc()).all()
+
+
+def get_chat_session(db: Session, session_id: str, user_id: int) -> ChatSession:
+    """Fetches a specific chat session belonging to a user."""
+    return db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
+
+
+def delete_chat_session(db: Session, session_id: str, user_id: int) -> bool:
+    """Deletes a chat session and all its messages for a user."""
+    session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
+    if session:
+        db.delete(session)
+        db.commit()
+        return True
+    return False
+
+
+def add_chat_message(
+    db: Session,
+    session_id: str,
+    role: str,
+    content: str,
+    sources: list = None,
+    token_stats: dict = None
+) -> ChatMessage:
+    """Appends a new message to a chat session and updates session timestamp."""
+    msg = ChatMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+        sources=json.dumps(sources) if sources else None,
+        token_stats=json.dumps(token_stats) if token_stats else None
+    )
+    db.add(msg)
+
+    # Touch session updated_at
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if session:
+        session.updated_at = datetime.datetime.utcnow()
+
+    db.commit()
+    db.refresh(msg)
+    return msg
+
+
+def get_chat_messages(db: Session, session_id: str) -> list[ChatMessage]:
+    """Retrieves all messages for a given chat session ordered chronologically."""
+    return db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc()).all()
+
 
 
