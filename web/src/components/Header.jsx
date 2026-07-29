@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { 
-  Layers, 
   UploadCloud, 
   MessageSquareText, 
   LogOut, 
@@ -29,12 +28,10 @@ const Header = () => {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container max-w-5xl mx-auto flex h-14 items-center justify-between gap-2 px-4">
+      <div className="w-full flex h-14 items-center justify-between gap-2 px-4 sm:px-6">
         {/* Brand Logo */}
         <Link to="/" className="flex items-center gap-2 font-bold tracking-tight text-foreground hover:opacity-90 transition-opacity shrink-0">
-          <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-            <Layers className="w-5 h-5" />
-          </div>
+          <img src="/fav.svg" alt="COLLAGE Logo" className="w-7 h-7 object-contain" />
           <span className="text-lg tracking-wide font-extrabold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
             COLLAGE
           </span>
