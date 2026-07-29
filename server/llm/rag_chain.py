@@ -1,5 +1,6 @@
 import logging
 import json
+from typing import Any
 from pydantic import BaseModel, Field
 from langchain_core.documents.base import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -118,6 +119,30 @@ def _format_context(docs: list[Document]) -> str:
     return "\n\n---\n\n".join(formatted_chunks)
 
 
+def _extract_text_from_chunk(chunk: Any) -> str:
+    """
+    Extracts plain string text from streaming or invoked LLM chunk objects.
+    Handles strings (Ollama) as well as structured lists/dicts (Google Gemini ChatGoogleGenerativeAI).
+    """
+    content = getattr(chunk, "content", chunk)
+
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        text_parts = []
+        for part in content:
+            if isinstance(part, str):
+                text_parts.append(part)
+            elif isinstance(part, dict):
+                text_parts.append(str(part.get("text", "")))
+            elif hasattr(part, "text"):
+                text_parts.append(str(getattr(part, "text", "")))
+            else:
+                text_parts.append(str(part))
+        return "".join(text_parts)
+    return str(content) if content is not None else ""
+
+
 @traceable(name="Structured RAG Query", run_type="chain")
 def query_rag_structured(question: str, college_slug: str, top_k: int = 4, chat_history: list = None) -> RAGResponse:
     """
@@ -134,7 +159,7 @@ def query_rag_structured(question: str, college_slug: str, top_k: int = 4, chat_
         logger.info(f"[SmartRouter] APP_META query: '{question}'")
         meta_prompt_messages = APP_META_PROMPT.format_messages(question=enhanced_question)
         response = settings.llm_model.invoke(meta_prompt_messages)
-        content_str = response.content if hasattr(response, "content") else str(response)
+        content_str = _extract_text_from_chunk(response)
         return RAGResponse(content=content_str, sources=[])
 
     docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
@@ -147,7 +172,7 @@ def query_rag_structured(question: str, college_slug: str, top_k: int = 4, chat_
     )
 
     response = settings.llm_model.invoke(prompt_messages)
-    content_str = response.content if hasattr(response, "content") else str(response)
+    content_str = _extract_text_from_chunk(response)
     sources = extract_used_sources(docs, llm_output=content_str)
 
     return RAGResponse(content=content_str, sources=sources)
@@ -227,7 +252,7 @@ def stream_rag_with_token_audit(
 
         full_completion_text = ""
         for chunk in settings.llm_model.stream(meta_prompt_messages):
-            token_str = chunk.content if hasattr(chunk, "content") else str(chunk)
+            token_str = _extract_text_from_chunk(chunk)
             full_completion_text += token_str
             audit.rag_completion_tokens += count_tokens(token_str)
             yield token_str
@@ -261,7 +286,7 @@ def stream_rag_with_token_audit(
 
     full_completion_text = ""
     for chunk in settings.llm_model.stream(prompt_messages):
-        token_str = chunk.content if hasattr(chunk, "content") else str(chunk)
+        token_str = _extract_text_from_chunk(chunk)
         full_completion_text += token_str
         audit.rag_completion_tokens += count_tokens(token_str)
         yield token_str
