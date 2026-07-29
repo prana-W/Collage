@@ -114,6 +114,15 @@ Collage/
 - **Decision**: Store chat message history locally in React frontend state (`messages`) for the duration of the user's session (cleared on page refresh) and pass `chat_history: list[ChatMessage]` in `POST /api/v1/query/stream`. In `query_enhancer.py`, use `MessagesPlaceholder` to inject prior `HumanMessage` / `AIMessage` items into the LLM prompt.
 - **Rationale**: Enables multi-turn contextual conversations (e.g., resolving `"What is its syllabus?"` into `"What is the syllabus for Electrical Engineering?"`) without cluttering vector retrieval with multi-turn prompt noise. Vector store search executes cleanly against the single standalone enhanced query.
 
+### 8. Smart Query Routing & Strict Guardrails (`query_enhancer.py` & `rag_chain.py`)
+- **Decision**: Use a single LLM call in `query_enhancer.py` (`analyze_and_enhance_query`) with Pydantic structured output (`JsonOutputParser`) to perform **both** query enhancement and intent classification simultaneously.
+- **Intent Classes**:
+  1. `INSTITUTE_RAG`: College/institute specific queries (syllabus, fees, hostel, exams, admissions) $\rightarrow$ Runs hybrid vector search & context citations.
+  2. `APP_META`: Greetings ("Hi", "Hello") or questions about the application (who built it, how to use it) $\rightarrow$ Bypasses ChromaDB vector search and streams a short 2-3 sentence answer directly.
+  3. `OUT_OF_BOUNDS`: Code generation ("write C++ code..."), essays, math, or unrelated general trivia $\rightarrow$ Bypasses ChromaDB vector search and returns a polite guardrail refusal informing the user that the AI is built exclusively for institute queries.
+- **Rationale**: Bypassing vector search for non-RAG queries eliminates vector store lookup latency and prevents system misuse as an arbitrary coding/homework solver. Performing intent routing inside the Query Enhancer step adds ZERO additional LLM latency overhead.
+
+
 ---
 
 ## 4. End-to-End System Workflows
@@ -190,16 +199,20 @@ Instantiates a dynamic `EnsembleRetriever`:
 - Configures ChromaDB MMR retriever (`k=top_k`, `fetch_k=20`, `lambda_mult=0.7`).
 - Merges results via RRF algorithm.
 
-### 5.5 Query Enhancer (`server/llm/query_enhancer.py`)
-Uses a lightweight LLM chain with `MessagesPlaceholder` to clean raw user inputs and resolve conversation history before vector search.
-- Fixes typos (e.g. `"syllbusb for elecvtical"` $\rightarrow$ `"What is the syllabus for electrical engineering?"`).
-- Resolves contextual pronouns in follow-up queries using session history (e.g. History: *User asks about EE*; Follow-up: *"What is its syllabus?"* $\rightarrow$ *"What is the syllabus for Electrical Engineering?"*).
-- Prevents retrieval failures caused by misspelled keywords or ambiguous follow-up phrasing.
+### 5.5 Query Enhancer & Intent Classifier (`server/llm/query_enhancer.py`)
+Uses a structured LLM chain (`JsonOutputParser` with Pydantic `QueryAnalysis`) with `MessagesPlaceholder` to clean raw user inputs, resolve conversation history, and classify query intent before vector search:
+- **Query Enhancement**: Fixes typos (e.g. `"syllbusb for elecvtical"` $\rightarrow$ `"What is the syllabus for electrical engineering?"`) and resolves pronouns using conversation history.
+- **Intent Classification**: Evaluates whether the query is `INSTITUTE_RAG` (requires ChromaDB search), `APP_META` (short greeting/app info), or `OUT_OF_BOUNDS` (code requests / general trivia refusal).
 
-### 5.6 RAG Chain & Audit (`server/llm/rag_chain.py` & `server/prompts/rag_prompt.py`)
+### 5.6 RAG Chain & Smart Router (`server/llm/rag_chain.py` & `server/prompts/rag_prompt.py`)
+- **Intent-Based Routing**: Evaluates `intent` returned from `analyze_and_enhance_query()`:
+  - `OUT_OF_BOUNDS`: Instantly yields `GUARDRAIL_REFUSAL_MESSAGE` (0 vector search tokens).
+  - `APP_META`: Streams short 2-3 sentence answer using `APP_META_PROMPT` (0 vector search tokens).
+  - `INSTITUTE_RAG`: Performs hybrid vector retrieval, formats context, enforces inline citations `[1]`, `[2]`, and streams response.
 - **Prompt Constraints & Citations**: Closed-domain instructions. Instructs the LLM to output inline bracket citations (`[1]`, `[2]`) corresponding to context chunks used. If context is insufficient, LLM outputs: *"I could not find relevant information in the uploaded institute documents to answer your query."*
 - **Citation-Based Source Filtering (`extract_used_sources`)**: Programmatically parses inline chunk citations (`[1]`, `[2]`) from the streamed LLM response to map back to retrieved chunks. Vector store chunks not cited by the LLM are stripped from the sources list. Deduplicates sources case-insensitively.
 - **Token Counter**: Uses `tiktoken` to audit token counts for Enhancer, Embedding, Prompt Context, and Completion Output, atomically persisting usage in MySQL.
+
 
 ### 5.7 Frontend SPA (`web/src/`)
 - **`AuthContext.jsx`**: Handles authentication state, token storage, user roles, and login/logout flows.

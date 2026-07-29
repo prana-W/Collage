@@ -26,3 +26,25 @@ RAG_PROMPT = ChatPromptTemplate.from_messages([
     ("system", RAG_SYSTEM_PROMPT),
     ("human", RAG_HUMAN_PROMPT),
 ])
+
+APP_META_SYSTEM_PROMPT = """\
+You are an AI academic assistant for college documentation and institute queries.
+The user is greeting you or asking about this application (e.g., who built it, how to use it, what features it has).
+
+RULES:
+1. Provide a short, welcoming, and concise answer (maximum 2-3 sentences).
+2. Explain that this platform enables students and faculty to ask questions regarding institute courses, syllabus, fees, admissions, and official campus documents.
+3. Do NOT answer unrelated coding, homework, essays, or general trivia.
+"""
+
+APP_META_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", APP_META_SYSTEM_PROMPT),
+    ("human", "{question}"),
+])
+
+GUARDRAIL_REFUSAL_MESSAGE = (
+    "I am an AI assistant designed specifically to help with institute-related queries "
+    "(such as courses, syllabus, fee structures, admissions, and campus information). "
+    "I cannot write code or answer unrelated general knowledge questions, but I'd be happy to assist you with any questions about the institute!"
+)
+

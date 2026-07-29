@@ -7,7 +7,7 @@ const NO_FOOTER_ROUTES = ['/query'];
 
 function Layout() {
     const { pathname } = useLocation();
-    const showFooter = !NO_FOOTER_ROUTES.includes(pathname);
+    const showFooter = !NO_FOOTER_ROUTES.some(route => pathname === route || pathname.startsWith(`${route}/`));
 
     return (
         <>

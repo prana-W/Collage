@@ -6,9 +6,9 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langsmith import traceable
 from config.settings import settings
-from prompts.rag_prompt import RAG_PROMPT, RAG_SYSTEM_PROMPT
+from prompts.rag_prompt import RAG_PROMPT, RAG_SYSTEM_PROMPT, APP_META_PROMPT, APP_META_SYSTEM_PROMPT, GUARDRAIL_REFUSAL_MESSAGE
 from retrieval.retriever import search_college_knowledge_base
-from llm.query_enhancer import enhance_query
+from llm.query_enhancer import enhance_query, analyze_and_enhance_query
 from utils.token_counter import count_tokens, TokenAudit
 from db.crud import record_token_usage
 
@@ -124,7 +124,19 @@ def query_rag_structured(question: str, college_slug: str, top_k: int = 4, chat_
     Executes RAG pipeline and returns a structured RAGResponse object containing
     content and sources list.
     """
-    enhanced_question = enhance_query(question, chat_history=chat_history)
+    enhanced_question, intent = analyze_and_enhance_query(question, chat_history=chat_history)
+
+    if intent == "OUT_OF_BOUNDS":
+        logger.info(f"[SmartRouter] OUT_OF_BOUNDS query: '{question}'")
+        return RAGResponse(content=GUARDRAIL_REFUSAL_MESSAGE, sources=[])
+
+    if intent == "APP_META":
+        logger.info(f"[SmartRouter] APP_META query: '{question}'")
+        meta_prompt_messages = APP_META_PROMPT.format_messages(question=enhanced_question)
+        response = settings.llm_model.invoke(meta_prompt_messages)
+        content_str = response.content if hasattr(response, "content") else str(response)
+        return RAGResponse(content=content_str, sources=[])
+
     docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
     formatted_context = _format_context(docs)
 
@@ -150,7 +162,7 @@ def build_rag_chain(college_slug: str, top_k: int = 4):
     def process_and_retrieve(inputs: dict) -> dict:
         raw_question = inputs["question"]
         chat_history = inputs.get("chat_history")
-        enhanced_question = enhance_query(raw_question, chat_history=chat_history)
+        enhanced_question, intent = analyze_and_enhance_query(raw_question, chat_history=chat_history)
         docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
         
         return {
@@ -184,9 +196,53 @@ def stream_rag_with_token_audit(
     """
     audit = TokenAudit()
 
-    # Stage 1: Query Enhancement
-    enhanced_question = enhance_query(question, chat_history=chat_history, audit=audit)
+    # Stage 1: Query Enhancement & Intent Classification
+    enhanced_question, intent = analyze_and_enhance_query(question, chat_history=chat_history, audit=audit)
 
+    # Route 1: OUT_OF_BOUNDS (Guardrail Refusal)
+    if intent == "OUT_OF_BOUNDS":
+        logger.info(f"[SmartRouter] Query '{question}' classified as OUT_OF_BOUNDS. Returning guardrail refusal.")
+        audit.embedding_tokens = 0
+        audit.rag_prompt_tokens = count_tokens(GUARDRAIL_REFUSAL_MESSAGE)
+        
+        yield GUARDRAIL_REFUSAL_MESSAGE
+        audit.rag_completion_tokens = count_tokens(GUARDRAIL_REFUSAL_MESSAGE)
+
+        new_user_total = 0
+        if user_id is not None:
+            new_user_total = record_token_usage(user_id=user_id, college_slug=college_slug, tokens_count=audit.total_tokens)
+
+        audit_dict = audit.to_dict()
+        audit_dict["user_cumulative_total"] = new_user_total
+        audit_dict["sources"] = []
+        yield f"\n\n__TOKEN_USAGE__:{json.dumps(audit_dict)}"
+        return
+
+    # Route 2: APP_META (Greetings & Application info - Bypasses Vector Store)
+    if intent == "APP_META":
+        logger.info(f"[SmartRouter] Query '{question}' classified as APP_META. Bypassing vector search.")
+        audit.embedding_tokens = 0
+        meta_prompt_messages = APP_META_PROMPT.format_messages(question=enhanced_question)
+        audit.rag_prompt_tokens = count_tokens(f"{APP_META_SYSTEM_PROMPT}\n{enhanced_question}")
+
+        full_completion_text = ""
+        for chunk in settings.llm_model.stream(meta_prompt_messages):
+            token_str = chunk.content if hasattr(chunk, "content") else str(chunk)
+            full_completion_text += token_str
+            audit.rag_completion_tokens += count_tokens(token_str)
+            yield token_str
+
+        new_user_total = 0
+        if user_id is not None:
+            new_user_total = record_token_usage(user_id=user_id, college_slug=college_slug, tokens_count=audit.total_tokens)
+
+        audit_dict = audit.to_dict()
+        audit_dict["user_cumulative_total"] = new_user_total
+        audit_dict["sources"] = []
+        yield f"\n\n__TOKEN_USAGE__:{json.dumps(audit_dict)}"
+        return
+
+    # Route 3: INSTITUTE_RAG (Full Vector Search + Context Citations)
     # Stage 2: Embedding Search
     docs = search_college_knowledge_base(enhanced_question, college_slug, top_k=top_k)
     audit.embedding_tokens = count_tokens(enhanced_question)
@@ -235,6 +291,7 @@ def stream_rag_with_token_audit(
 
     # Append JSON payload at end of stream for frontend display
     yield f"\n\n__TOKEN_USAGE__:{json.dumps(audit_dict)}"
+
 
 
 def ask(question: str, college_slug: str, top_k: int = 4, chat_history: list = None) -> str:
