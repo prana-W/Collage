@@ -464,7 +464,7 @@ const Query = () => {
         <div className="p-3 border-b border-border/40 flex items-center justify-between gap-2">
           <button
             onClick={handleNewChat}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity shadow-sm"
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl btn-gradient-brand text-xs font-semibold hover:opacity-90 transition-opacity shadow-sm"
           >
             <Plus className="w-4 h-4" />
             <span>New Chat</span>
@@ -498,11 +498,11 @@ const Query = () => {
                   onClick={() => navigate(`/query/${session.id}`)}
                   className={`group relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs cursor-pointer transition-all ${
                     isActive
-                      ? 'bg-muted text-foreground font-medium border border-border/80 shadow-sm'
+                      ? 'badge-teal font-medium shadow-sm'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
                   }`}
                 >
-                  <MessageSquare className="w-3.5 h-3.5 shrink-0 text-primary" />
+                  <MessageSquare className="w-3.5 h-3.5 shrink-0 text-[#4eb2a8]" />
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-xs leading-snug">{session.title}</p>
                     <span className="text-[10px] text-muted-foreground/70 uppercase font-mono">
@@ -547,20 +547,20 @@ const Query = () => {
               onClick={handleNewChat}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted/80 px-2.5 py-1 rounded-lg border border-border/50 transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 text-[#4eb2a8]" />
               <span>New</span>
             </button>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Editable institute slug pill */}
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/60 rounded-full px-3 py-1">
-              <Building2 className="w-3 h-3 text-primary shrink-0" />
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground badge-teal rounded-full px-3 py-1">
+              <Building2 className="w-3 h-3 text-[#4eb2a8] shrink-0" />
               <input
                 type="text"
                 value={collegeSlug}
                 onChange={e => setCollegeSlug(e.target.value)}
-                className="bg-transparent font-mono text-primary text-xs w-28 focus:outline-none"
+                className="bg-transparent font-mono text-[#4eb2a8] font-bold text-xs w-28 focus:outline-none"
                 title="Target institute slug"
               />
             </div>
@@ -574,23 +574,23 @@ const Query = () => {
         >
           {isLoadingHistory ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <Loader2 className="w-6 h-6 animate-spin text-[#4eb2a8]" />
               <p className="text-xs">Loading chat history…</p>
             </div>
           ) : displayMessages.length === 0 ? (
             /* ── Empty / welcome state ── */
             <div className="flex flex-col items-center justify-center h-full px-4 pb-8 text-center space-y-8">
               <div className="space-y-3">
-                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
-                  <Sparkles className="w-7 h-7 text-primary" />
+                <div className="w-14 h-14 rounded-2xl badge-teal flex items-center justify-center mx-auto shadow-md">
+                  <Sparkles className="w-7 h-7 text-[#4eb2a8]" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-foreground tracking-tight">
-                    How can I help you today?
+                  <h2 className="text-2xl font-bold tracking-tight">
+                    How can I help you <span className="text-gradient-brand">today</span>?
                   </h2>
                   <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
                     Ask anything about&nbsp;
-                    <span className="font-mono font-semibold text-primary">{collegeSlug}</span>.
+                    <span className="font-mono font-semibold text-[#4eb2a8]">{collegeSlug}</span>.
                     Answers are grounded in ingested documents and web pages.
                   </p>
                 </div>
@@ -601,7 +601,7 @@ const Query = () => {
                   <button
                     key={i}
                     onClick={() => handleAsk(s.label)}
-                    className="flex items-start gap-3 p-4 text-left rounded-2xl border border-border bg-card/60 hover:bg-card hover:border-primary/30 hover:shadow-sm transition-all group"
+                    className="flex items-start gap-3 p-4 text-left rounded-2xl border border-border bg-card/60 hover:bg-card hover:border-[#4eb2a8]/40 hover:shadow-md transition-all group"
                   >
                     <span className="text-lg leading-none shrink-0">{s.icon}</span>
                     <span className="text-sm text-foreground/80 group-hover:text-foreground transition-colors leading-snug">
@@ -626,16 +626,16 @@ const Query = () => {
                   ) : (
                     /* AI message — markdown flows directly */
                     <div className="flex items-start gap-3.5">
-                      <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0 mt-0.5">
-                        <Bot className="w-3.5 h-3.5" />
+                      <div className="w-7 h-7 rounded-lg badge-teal text-primary flex items-center justify-center shrink-0 mt-0.5">
+                        <Bot className="w-3.5 h-3.5 text-[#4eb2a8]" />
                       </div>
 
                       <div className="flex-1 min-w-0">
                         {/* Token count badge */}
                         {msg.tokenStats?.total_tokens && !msg.isStreaming && (
                           <div className="flex items-center gap-1.5 mb-2">
-                            <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/40 px-2 py-0.5 rounded-full">
-                              {msg.tokenStats.total_tokens} tokens
+                            <span className="text-[10px] font-mono badge-gold px-2 py-0.5 rounded-full">
+                              ⚡ {msg.tokenStats.total_tokens} tokens
                             </span>
                           </div>
                         )}
@@ -645,16 +645,16 @@ const Query = () => {
                           <div className={`text-sm ${msg.isError ? 'text-destructive' : msg.isCancelled ? 'text-muted-foreground' : 'text-foreground'}`}>
                             <Markdown content={msg.text} />
                             {msg.isStreaming && (
-                              <span className="inline-block w-[3px] h-4 bg-primary/80 rounded-sm animate-pulse ml-0.5 align-middle" />
+                              <span className="inline-block w-[3px] h-4 bg-[#4eb2a8] rounded-sm animate-pulse ml-0.5 align-middle" />
                             )}
                           </div>
                         ) : (
                           /* Thinking state */
                           <div className="flex items-center gap-2 text-muted-foreground text-sm py-1">
                             <span className="flex gap-1">
-                              <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '0ms' }} />
-                              <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '150ms' }} />
-                              <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+                              <span className="w-2 h-2 rounded-full bg-[#4eb2a8] animate-bounce" style={{ animationDelay: '0ms' }} />
+                              <span className="w-2 h-2 rounded-full bg-[#3b8599] animate-bounce" style={{ animationDelay: '150ms' }} />
+                              <span className="w-2 h-2 rounded-full bg-[#df7850] animate-bounce" style={{ animationDelay: '300ms' }} />
                             </span>
                           </div>
                         )}
@@ -688,7 +688,7 @@ const Query = () => {
         <div className="shrink-0 px-4 md:px-6 py-4 bg-background">
           <div className="max-w-3xl mx-auto">
             <div className={`relative flex items-end gap-2 bg-card border rounded-3xl shadow-sm transition-all px-4 py-3 ${
-              isGenerating ? 'border-border/60' : 'border-border hover:border-border/80 focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/5'
+              isGenerating ? 'border-border/60' : 'border-border hover:border-border/80 focus-within:border-[#4eb2a8]/50 focus-within:shadow-md'
             }`}>
               <textarea
                 ref={textareaRef}
@@ -717,7 +717,7 @@ const Query = () => {
                   <button
                     type="button"
                     onClick={handleCancel}
-                    className="w-8 h-8 rounded-full bg-foreground text-background flex items-center justify-center hover:opacity-80 transition-opacity"
+                    className="w-8 h-8 rounded-full bg-destructive text-white flex items-center justify-center hover:opacity-90 transition-opacity"
                     title="Stop generating"
                   >
                     <StopCircle className="w-4 h-4" />
@@ -727,10 +727,10 @@ const Query = () => {
                     type="button"
                     onClick={() => handleAsk()}
                     disabled={!question.trim()}
-                    className="w-8 h-8 rounded-full bg-foreground text-background flex items-center justify-center disabled:opacity-30 hover:opacity-80 transition-opacity"
+                    className="w-8 h-8 rounded-full btn-gradient-brand flex items-center justify-center disabled:opacity-30 hover:opacity-90 transition-opacity shadow-sm"
                     title="Send"
                   >
-                    <Send className="w-4 h-4" />
+                    <Send className="w-4 h-4 text-white" />
                   </button>
                 )}
               </div>

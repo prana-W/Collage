@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { 
@@ -11,7 +11,8 @@ import {
   LogIn,
   UserPlus,
   FileCheck,
-  User as UserIcon
+  Sun,
+  Moon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProfileModal } from '@/components/ProfileModal';
@@ -19,7 +20,32 @@ import { ProfileModal } from '@/components/ProfileModal';
 const Header = () => {
   const { isAuthenticated, user, isAdmin, logout } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme) {
+        return savedTheme === 'dark';
+      }
+      return document.documentElement.classList.contains('dark');
+    }
+    return true;
+  });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      root.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleTheme = () => {
+    setIsDarkMode(prev => !prev);
+  };
 
   const handleLogout = () => {
     logout();
@@ -32,7 +58,7 @@ const Header = () => {
         {/* Brand Logo */}
         <Link to="/" className="flex items-center gap-2 font-bold tracking-tight text-foreground hover:opacity-90 transition-opacity shrink-0">
           <img src="/fav.svg" alt="COLLAGE Logo" className="w-7 h-7 object-contain" />
-          <span className="text-lg tracking-wide font-extrabold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+          <span className="text-lg tracking-wide font-extrabold text-gradient-brand">
             COLLAGE
           </span>
         </Link>
@@ -66,7 +92,7 @@ const Header = () => {
                     className={({ isActive }) =>
                       `flex items-center gap-1.5 py-1 px-2.5 rounded-md transition-colors text-xs font-medium whitespace-nowrap shrink-0 ${
                         isActive
-                          ? 'bg-primary/10 text-primary font-semibold'
+                          ? 'badge-coral font-semibold'
                           : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
                       }`
                     }
@@ -75,13 +101,12 @@ const Header = () => {
                     Data Ingestion
                   </NavLink>
 
-
                   <NavLink
                     to="/documents"
                     className={({ isActive }) =>
                       `flex items-center gap-1.5 py-1 px-2.5 rounded-md transition-colors text-xs font-medium whitespace-nowrap shrink-0 ${
                         isActive
-                          ? 'bg-primary/10 text-primary font-semibold'
+                          ? 'badge-gold font-semibold'
                           : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
                       }`
                     }
@@ -98,7 +123,7 @@ const Header = () => {
                 className={({ isActive }) =>
                   `flex items-center gap-1.5 py-1 px-2.5 rounded-md transition-colors text-xs font-medium whitespace-nowrap shrink-0 ${
                     isActive
-                      ? 'bg-primary/10 text-primary font-semibold'
+                      ? 'badge-teal font-semibold'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
                   }`
                 }
@@ -110,8 +135,23 @@ const Header = () => {
           )}
         </nav>
 
-        {/* Auth section */}
+        {/* Controls & Auth section */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Light / Dark Theme Toggle Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleTheme}
+            title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all shrink-0"
+          >
+            {isDarkMode ? (
+              <Sun className="w-4 h-4 text-brand-gold transition-transform hover:rotate-45 duration-300" />
+            ) : (
+              <Moon className="w-4 h-4 text-brand-ocean transition-transform hover:-rotate-12 duration-300" />
+            )}
+          </Button>
+
           {isAuthenticated ? (
             <div className="flex items-center gap-1.5 shrink-0">
               {/* User profile badge - Clickable */}
@@ -122,9 +162,9 @@ const Header = () => {
                 className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-card hover:bg-accent border border-border/70 text-xs transition-colors cursor-pointer shrink-0"
               >
                 {isAdmin ? (
-                  <Shield className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <Shield className="w-3.5 h-3.5 text-brand-coral shrink-0" />
                 ) : (
-                  <GraduationCap className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <GraduationCap className="w-3.5 h-3.5 text-brand-teal shrink-0" />
                 )}
                 <div className="flex flex-col text-left leading-none space-y-0.5">
                   <span className="font-semibold text-foreground max-w-[100px] sm:max-w-[130px] truncate text-xs">
@@ -157,7 +197,7 @@ const Header = () => {
                 </Button>
               </Link>
               <Link to="/register">
-                <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground font-medium">
+                <Button size="sm" className="h-8 text-xs gap-1.5 btn-gradient-brand font-medium">
                   <UserPlus className="w-3.5 h-3.5" />
                   Register
                 </Button>
