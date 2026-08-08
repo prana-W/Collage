@@ -288,7 +288,7 @@ uv run rq worker
 #### 3. Start Backend API Server
 ```bash
 cd server
-uv run uvicorn app:app --reload
+uv run python app.py
 ```
 
 #### 4. Start React Frontend

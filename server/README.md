@@ -51,10 +51,10 @@ redis-server
 ```
 
 ### Terminal 2: FastAPI Server
-Starts the API endpoints (runs on `http://127.0.0.1:8000`).
+Starts the API endpoints (runs on `http://127.0.0.1:8001`).
 ```bash
 cd server
-uv run uvicorn app:app --reload
+uv run python app.py
 ```
 
 ### Terminal 3: RQ Worker
@@ -69,7 +69,7 @@ uv run rq worker
 ### 1. Ingest PDFs (POST)
 Queues a background job to OCR, chunk, and embed PDFs into the vector store.
 ```bash
-curl -X POST http://localhost:8000/api/v1/ingest \
+curl -X POST http://localhost:8001/api/v1/ingest \
   -F "college_slug=nitjsr" \
   -F "files=@test2.pdf"
 ```
@@ -78,7 +78,7 @@ curl -X POST http://localhost:8000/api/v1/ingest \
 ### 2. Check Job Status (GET)
 Check the progress of your background ingestion job.
 ```bash
-curl http://localhost:8000/api/v1/ingest/status/<job_id>
+curl http://localhost:8001/api/v1/ingest/status/<job_id>
 ```
 
 ## Local CLI Testing

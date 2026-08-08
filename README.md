@@ -133,9 +133,9 @@ uv run rq worker
 #### Step C: Start FastAPI Backend
 ```bash
 cd server
-uv run uvicorn app:app --reload
+uv run python app.py
 ```
-*Backend API will run at `http://localhost:8000` (Swagger docs available at `http://localhost:8000/docs`).*
+*Backend API will run at `http://localhost:8001` (Swagger docs available at `http://localhost:8001/docs`).*
 
 #### Step D: Start React Frontend
 ```bash
@@ -143,7 +143,7 @@ cd web
 npm install
 npm run dev
 ```
-*Frontend app will run at `http://localhost:5173`.*
+*Frontend app will run at `http://localhost:5166`.*
 
 ---
 
