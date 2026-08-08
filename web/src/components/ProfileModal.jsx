@@ -6,11 +6,9 @@ import {
   Building2, 
   Shield, 
   GraduationCap, 
-  Zap, 
   Calendar, 
   X, 
-  RefreshCw,
-  Cpu
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
@@ -51,7 +49,6 @@ export const ProfileModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const isAdmin = profile?.role === 'admin';
-  const tokensUsed = profile?.total_tokens_used || 0;
 
   return ReactDOM.createPortal(
     <div 
@@ -127,25 +124,7 @@ export const ProfileModal = ({ isOpen, onClose }) => {
 
         {/* Details Grid */}
         <div className="grid grid-cols-1 gap-3 text-xs">
-          {/* Total Token Consumption Card */}
-          <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 space-y-1.5">
-            <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium">
-              <span className="flex items-center gap-1.5 text-primary font-semibold">
-                <Zap className="w-4 h-4" />
-                Total Tokens Used
-              </span>
-              <span className="font-mono text-[10px] text-muted-foreground">Cumulative</span>
-            </div>
-            <div className="flex items-baseline gap-2 pt-0.5">
-              <span className="text-2xl font-black font-mono text-foreground tracking-tight">
-                {tokensUsed.toLocaleString()}
-              </span>
-              <span className="text-xs text-muted-foreground font-mono">tokens</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground/80 pt-1">
-              Includes query enhancement, vector embeddings, and RAG completion tokens.
-            </p>
-          </div>
+
 
           {/* Institute Info */}
           <div className="flex items-center justify-between p-3 rounded-xl bg-card border border-border/60">

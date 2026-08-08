@@ -631,14 +631,7 @@ const Query = () => {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        {/* Token count badge */}
-                        {msg.tokenStats?.total_tokens && !msg.isStreaming && (
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <span className="text-[10px] font-mono badge-gold px-2 py-0.5 rounded-full">
-                              ⚡ {msg.tokenStats.total_tokens} tokens
-                            </span>
-                          </div>
-                        )}
+
 
                         {/* Message content */}
                         {msg.text ? (

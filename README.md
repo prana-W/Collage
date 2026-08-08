@@ -12,9 +12,8 @@ COLLAGE (a wordplay on "College") is a multi-tenant, enterprise-grade Retrieval-
 - 📄 **Layout-Aware PDF Ingestion**: Leverages **Docling** and **HybridChunker** (`BAAI/bge-small-en-v1.5` tokenizer) for layout, table, and heading-aware semantic chunking bounded to 512-token context windows.
 - 🌐 **Web Content Scraper (Crawl4AI)**: Playwright-backed stealth crawler capable of parsing JavaScript-rendered university portals and notice boards into indexed Markdown vectors.
 - 🔍 **Hybrid Ensemble Retrieval**: Combines **BM25** (60% weight for exact course codes, notice dates, and names) and **ChromaDB MMR** (40% weight for semantic intent and chunk diversity) via Reciprocal Rank Fusion (RRF).
-- ⚡ **Real-Time Token Streaming**: Token-by-token server-sent stream for zero latency UX, appended with an uncheatable token audit payload (`__TOKEN_USAGE__`).
+- ⚡ **Real-Time Streaming**: Token-by-token server-sent stream for zero latency UX.
 - 🔗 **Interactive Citations**: Renders exact source document links (web URLs or inline PDF view popups) alongside AI responses.
-- 📊 **Token Usage Accounting**: Tracks and persists 4-stage token metrics (Query Enhancer, Embedding, Context Prompt, Stream Output) per user and per college in MySQL.
 - 🔄 **Dual Execution Modes**: 
   - **Development**: 100% free, offline execution using local **Ollama** (`llama3.2` + `bge-small-en-v1.5`).
   - **Production**: High-speed cloud deployment using **Google Gemini API** (`gemini-1.5-flash` + `embedding-001`).
@@ -58,7 +57,7 @@ COLLAGE (a wordplay on "College") is a multi-tenant, enterprise-grade Retrieval-
 | **Backend** | FastAPI (Python 3.13), Pydantic v2, `uv` Package Manager |
 | **Database** | MySQL, SQLAlchemy 2.0 ORM, PyMySQL |
 | **Vector DB** | ChromaDB (Isolated persistent collections per college) |
-| **AI & RAG** | LangChain (LCEL), Docling, HybridChunker, Tiktoken |
+| **AI & RAG** | LangChain (LCEL), Docling, HybridChunker |
 | **Web Scraping** | Crawl4AI 0.9.2 (Playwright + Stealth Mode + BeautifulSoup) |
 | **Task Queue** | RQ (Redis Queue), Redis Server |
 | **Frontend** | React 18, Vite, TailwindCSS, React Router v6, Lucide Icons |
